@@ -62,11 +62,11 @@
 ## 4. Structure CLI
 
 ```bash
-orretcrypt.py keygen [--output-dir <dir>]     # Génère clépair Kyber-768
-orretcrypt.py encrypt --key <pub.pem> --file <f> [--output <out.orret>]
-orretcrypt.py decrypt --key <priv.pem> --file <f.orret> [--output <out>]
-orretcrypt.py share --recipient-key <pub.pem> --my-key <priv.pem> --file <f> [--output <out.orret>]
-orretcrypt.py info --file <f.orret>           # Affiche métadonnées
+python3 -m orretcrypt keygen [--output-dir <dir>]     # Génère clépair Kyber-768
+python3 -m orretcrypt encrypt --key <pub.pem> --file <f> [--output <out.orret>]
+python3 -m orretcrypt decrypt --key <priv.pem> --file <f.orret> [--output <out>]
+python3 -m orretcrypt share --recipient-key <pub.pem> --my-key <priv.pem> --file <f> [--output <out.orret>]
+python3 -m orretcrypt info --file <f.orret>           # Affiche métadonnées
 ```
 
 ### Format de clé PEM
