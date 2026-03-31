@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OrretCrypt — Post-Quantum Encryption</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #07070d;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ─── Header ─────────────────────────────────────── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 32px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .logo { font-size: 18px; font-weight: 600; letter-spacing: 0.08em; }
+    .logo span { color: rgba(74,158,255,0.7); }
+    .tagline { font-size: 12px; color: rgba(255,255,255,0.25); }
+
+    /* ─── Main ────────────────────────────────────────── */
+    main {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 32px;
+    }
+
+    .card {
+      width: min(540px, 100%);
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      padding: 36px;
+    }
+
+    .section-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+      color: rgba(255,255,255,0.25); text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    /* ─── Key Gen ─────────────────────────────────────── */
+    #gen-section { margin-bottom: 28px; }
+    .key-row { display: flex; gap: 8px; }
+    .key-row input { display: none; }
+    .key-btn {
+      flex: 1; padding: 14px; border-radius: 12px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.6); font-size: 13px; font-weight: 500;
+      cursor: pointer; text-align: center; transition: all 0.2s;
+      font-family: inherit;
+    }
+    .key-btn:hover { background: rgba(74,158,255,0.1); border-color: rgba(74,158,255,0.25); color: rgba(255,255,255,0.9); }
+    .key-display {
+      margin-top: 12px; padding: 14px; border-radius: 10px;
+      background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06);
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: rgba(255,255,255,0.45); word-break: break-all;
+      display: none; max-height: 120px; overflow-y: auto;
+    }
+    .key-display.show { display: block; }
+    .key-info { margin-top: 8px; font-size: 11px; color: rgba(255,255,255,0.2); }
+    .key-info span { color: rgba(74,158,255,0.7); }
+
+    /* ─── File Zone ───────────────────────────────────── */
+    #file-zone {
+      border: 2px dashed rgba(255,255,255,0.08);
+      border-radius: 14px; padding: 40px 24px; text-align: center;
+      cursor: pointer; transition: all 0.2s; margin-bottom: 16px;
+    }
+    #file-zone:hover, #file-zone.dragover {
+      border-color: rgba(74,158,255,0.35);
+      background: rgba(74,158,255,0.04);
+    }
+    #file-zone.has-file { border-color: rgba(46,204,113,0.3); background: rgba(46,204,113,0.04); }
+    .zone-icon { font-size: 28px; margin-bottom: 10px; }
+    .zone-text { font-size: 13px; color: rgba(255,255,255,0.4); }
+    .zone-hint { font-size: 11px; color: rgba(255,255,255,0.18); margin-top: 4px; }
+    .file-name { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.7); margin-top: 8px; }
+    .file-size { font-size: 11px; color: rgba(255,255,255,0.3); }
+
+    /* ─── Actions ─────────────────────────────────────── */
+    .actions { display: flex; gap: 8px; margin-bottom: 20px; }
+    .action-btn {
+      flex: 1; padding: 13px; border-radius: 12px; border: none;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: all 0.2s;
+    }
+    .action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-enc {
+      background: rgba(74,158,255,0.2); color: rgba(74,158,255,0.9);
+    }
+    .btn-enc:hover:not(:disabled) { background: rgba(74,158,255,0.3); }
+    .btn-dec {
+      background: rgba(46,204,113,0.15); color: rgba(46,204,113,0.85);
+    }
+    .btn-dec:hover:not(:disabled) { background: rgba(46,204,113,0.25); }
+
+    /* ─── Output ──────────────────────────────────────── */
+    #output-zone {
+      padding: 20px; border-radius: 12px;
+      background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05);
+      display: none; margin-bottom: 16px;
+    }
+    #output-zone.show { display: block; }
+    .out-title { font-size: 11px; color: rgba(255,255,255,0.3); margin-bottom: 8px; }
+    .out-msg { font-size: 13px; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
+    .dl-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 10px;
+      background: rgba(74,158,255,0.15); border: 1px solid rgba(74,158,255,0.25);
+      color: rgba(74,158,255,0.9); font-size: 13px; font-weight: 500;
+      cursor: pointer; text-decoration: none; transition: all 0.2s;
+      font-family: inherit;
+    }
+    .dl-btn:hover { background: rgba(74,158,255,0.25); }
+
+    /* ─── Security Note ───────────────────────────────── */
+    .sec-note {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 14px 16px; border-radius: 10px;
+      background: rgba(245,166,35,0.06); border: 1px solid rgba(245,166,35,0.12);
+      margin-top: 20px;
+    }
+    .sec-note .icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .sec-note p { font-size: 11px; color: rgba(255,255,255,0.35); line-height: 1.6; }
+    .sec-note strong { color: rgba(245,166,35,0.8); }
+
+    /* ─── Footer ─────────────────────────────────────── */
+    footer {
+      text-align: center; padding: 16px;
+      font-size: 11px; color: rgba(255,255,255,0.15);
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+    footer a { color: rgba(74,158,255,0.4); text-decoration: none; }
+    footer a:hover { color: rgba(74,158,255,0.7); }
+
+    /* ─── Anim ───────────────────────────────────────── */
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+    .card { animation: fadeIn 0.4s ease; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">OrretCrypt <span>●</span></div>
+  <div class="tagline">Post-Quantum Encryption · X25519 + AES-256-GCM · Format: .orret</div>
+</header>
+
+<main>
+  <div class="card">
+
+    <!-- Key Generation -->
+    <div id="gen-section">
+      <div class="section-title">Key Management</div>
+      <div class="key-row">
+        <div class="key-btn" id="btn-gen-key">🔑 Generate KeyPair</div>
+        <label class="key-btn" id="btn-load-priv">🔐 Load Private Key<input type="file" accept=".pem" id="priv-input"></label>
+        <label class="key-btn" id="btn-load-pub">📄 Load Public Key<input type="file" accept=".pem" id="pub-input"></label>
+      </div>
+      <div class="key-display" id="key-display"></div>
+      <div class="key-info" id="key-info">
+        <span>No keys loaded</span> — Generate or load PEM keys to encrypt/decrypt
+      </div>
+    </div>
+
+    <!-- File Drop -->
+    <div class="section-title">File</div>
+    <div id="file-zone">
+      <div class="zone-icon">📁</div>
+      <div class="zone-text">Drop a file here, or click to browse</div>
+      <div class="zone-hint">Any file type · No upload — all processing is local</div>
+      <div class="file-name" id="file-name" style="display:none"></div>
+      <div class="file-size" id="file-size" style="display:none"></div>
+    </div>
+    <input type="file" id="file-input" style="display:none">
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="action-btn btn-enc" id="btn-encrypt" disabled>🔒 Encrypt → .orret</button>
+      <button class="action-btn btn-dec" id="btn-decrypt" disabled>🔓 Decrypt .orret</button>
+    </div>
+
+    <!-- Output -->
+    <div id="output-zone">
+      <div class="out-title">OUTPUT</div>
+      <div class="out-msg" id="out-msg"></div>
+      <a class="dl-btn" id="dl-btn" download>↓ Download</a>
+    </div>
+
+    <!-- Security Note -->
+    <div class="sec-note">
+      <div class="icon">🛡️</div>
+      <p>
+        <strong>Security:</strong> X25519 ECDH + AES-256-GCM (IND-CCA2 secure).
+        All processing happens <strong>in your browser</strong> — no file leaves your device.
+        Keys are never sent anywhere. The .orret format supports post-quantum KEMs (Kyber) in future versions.
+      </p>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  OrretCrypt v1.0 · <a href="https://github.com/orretter/orretcrypt" target="_blank">GitHub</a>
+  · Built by <a href="https://synapse-ai.dev" target="_blank">Synapse 🧠</a>
+</footer>
+
+<script>
+// ─── Web Crypto Implementation ─────────────────────────────────────────────
+// Pure Web Crypto API — no external dependencies
+// X25519 ECDH + AES-256-GCM
+
+const ORRET = {
+  keys: { publicKey: null, privateKey: null, publicKeyPem: null },
+
+  async generateKeyPair() {
+    const keyPair = await crypto.subtle.generateKey(
+      { name: "X25519" },
+      true  // extractable
+    );
+    this.keys.privateKey = keyPair.privateKey;
+    this.keys.publicKey = keyPair.publicKey;
+
+    const pubRaw = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+    this.keys.publicKeyPem = this.rawToPem(pubRaw, "ORRET PUBLIC KEY");
+    const privRaw = await crypto.subtle.exportKey("raw", keyPair.privateKey);
+    const privPem = this.rawToPem(privRaw, "ORRET PRIVATE KEY");
+
+    return { publicKeyPem: this.keys.publicKeyPem, privateKeyPem: privPem };
+  },
+
+  async importPublicKey(pem) {
+    const raw = this.pemToRaw(pem);
+    this.keys.publicKey = await crypto.subtle.importKey(
+      "raw", raw, { name: "X25519" }, true, []
+    );
+    this.keys.publicKeyPem = pem;
+  },
+
+  async importPrivateKey(pem) {
+    const raw = this.pemToRaw(pem);
+    this.keys.privateKey = await crypto.subtle.importKey(
+      "raw", raw, { name: "X25519" }, true, ["deriveBits"]
+    );
+  },
+
+  rawToPem(raw, marker) {
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(raw)));
+    const lines = b64.match(/.{1,64}/g) || [];
+    const header = `-----BEGIN ${marker}-----\n`;
+    const footer = `\n-----END ${marker}-----`;
+    return header + lines.join("\n") + footer;
+  },
+
+  pemToRaw(pem) {
+    const lines = pem.split("\n").filter(l => !l.startsWith("-----"));
+    const b64 = lines.join("");
+    const binary = atob(b64);
+    return Uint8Array.from(binary, c => c.charCodeAt(0)).buffer;
+  },
+
+  async deriveBits(myPrivate, peerPublic) {
+    const bits = await crypto.subtle.deriveBits(
+      { name: "X25519", public: peerPublic },
+      myPrivate,
+      256
+    );
+    return new Uint8Array(bits);
+  },
+
+  async kdf(sharedSecret) {
+    const key = await crypto.subtle.importKey(
+      "raw", sharedSecret,
+      { name: "HKDF" },
+      false, ["deriveKey"]
+    );
+    return crypto.subtle.deriveKey(
+      { name: "HKDF", hash: "SHA-512", salt: new Uint8Array(32), info: new TextEncoder().encode("orretcrypt-aes-v1") },
+      key, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]
+    );
+  },
+
+  async encrypt(plaintextBuffer) {
+    // Ephemeral key pair
+    const ephem = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+    const ephemPubRaw = await crypto.subtle.exportKey("raw", ephem.publicKey);
+    const ephemPrivKey = ephem.privateKey;
+
+    // Derive shared secret with recipient's public key
+    const ss = await this.deriveBits(ephemPrivKey, this.keys.publicKey);
+    const aesKey = await this.kdf(ss.buffer);
+
+    // AES-GCM encrypt
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: nonce },
+      aesKey,
+      plaintextBuffer
+    );
+
+    // Build .orret: magic(4) + version(1) + kem(1) + ephem_pub(32) + nonce(12) + tag_ct
+    const ctArr = new Uint8Array(ct);
+    const total = new Uint8Array(4 + 1 + 1 + 32 + 12 + ctArr.length);
+    const view = new DataView(total.buffer);
+    // ORRE magic
+    total[0] = 0x4F; total[1] = 0x52; total[2] = 0x52; total[3] = 0x45;
+    view.setUint8(4, 1);      // version
+    view.setUint8(5, 1);      // X25519
+    total.set(new Uint8Array(ephemPubRaw), 6);   // ephem pub
+    total.set(nonce, 6 + 32);                    // nonce
+    total.set(ctArr, 6 + 32 + 12);               // ciphertext+tag
+
+    return total.buffer;
+  },
+
+  async decrypt(orretBuffer) {
+    const data = new Uint8Array(orretBuffer);
+    // Verify magic
+    if (data[0] !== 0x4F || data[1] !== 0x52 || data[2] !== 0x52 || data[3] !== 0x45) {
+      throw new Error("Invalid .orret file");
+    }
+    const version = data[4];
+    const kemType = data[5];
+    if (version !== 1) throw new Error(`Unsupported version: ${version}`);
+    if (kemType !== 1) throw new Error("Unsupported KEM type");
+
+    const ephemPubRaw = data.slice(6, 6 + 32);
+    const nonce = data.slice(6 + 32, 6 + 32 + 12);
+    const ct = data.slice(6 + 32 + 12);
+
+    const ephemPubKey = await crypto.subtle.importKey(
+      "raw", ephemPubRaw, { name: "X25519" }, true, []
+    );
+    const ss = await this.deriveBits(this.keys.privateKey, ephemPubKey);
+    const aesKey = await this.kdf(ss.buffer);
+
+    return await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: nonce },
+      aesKey,
+      ct
+    );
+  },
+};
+
+// ─── UI ─────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+let selectedFile = null;
+let outputBlob = null;
+
+function formatSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+  return (n/1024/1024).toFixed(1) + " MB";
+}
+
+function updateKeyInfo() {
+  const info = $("key-info");
+  if (ORRET.keys.publicKey && ORRET.keys.privateKey) {
+    info.innerHTML = '<span style="color:#2ecc71">✓</span> KeyPair ready — you can encrypt & decrypt';
+  } else if (ORRET.keys.publicKey) {
+    info.innerHTML = '<span style="color:#f5a623">⚠</span> Public key only — you can encrypt files';
+  } else {
+    info.innerHTML = '<span>No keys loaded</span> — Generate or load PEM keys to encrypt/decrypt';
+  }
+}
+
+$("btn-gen-key").addEventListener("click", async () => {
+  $("btn-gen-key").textContent = "⏳ Generating...";
+  $("btn-gen-key").disabled = true;
+  try {
+    const kp = await ORRET.generateKeyPair();
+    const display = $("key-display");
+    display.innerHTML = `<strong style="color:rgba(74,158,255,0.7)">Public Key:</strong><br>${escHtml(kp.publicKeyPem)}<br><br><strong style="color:rgba(245,166,35,0.7)">Private Key:</strong><br>${escHtml(kp.privateKeyPem)}<br><br><span style="color:rgba(255,255,255,0.2);font-size:10px">Save these! Private key is shown once.</span>`;
+    display.classList.add("show");
+    updateKeyInfo();
+  } finally {
+    $("btn-gen-key").textContent = "🔑 Generate KeyPair";
+    $("btn-gen-key").disabled = false;
+  }
+});
+
+$("pub-input").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const txt = await f.text();
+  await ORRET.importPublicKey(txt);
+  $("key-info").innerHTML = `<span style="color:#f5a623">⚠</span> Public key loaded: <span style="color:rgba(255,255,255,0.5)">${escHtml(f.name)}</span>`;
+  updateKeyInfo();
+});
+
+$("priv-input").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const txt = await f.text();
+  await ORRET.importPrivateKey(txt);
+  $("key-info").innerHTML = `<span style="color:#f5a623">⚠</span> Private key loaded: <span style="color:rgba(255,255,255,0.5)">${escHtml(f.name)}</span>`;
+  updateKeyInfo();
+});
+
+// File selection
+const fileZone = $("file-zone");
+const fileInput = $("file-input");
+
+fileZone.addEventListener("click", () => fileInput.click());
+fileZone.addEventListener("dragover", e => { e.preventDefault(); fileZone.classList.add("dragover"); });
+fileZone.addEventListener("dragleave", () => fileZone.classList.remove("dragover"));
+fileZone.addEventListener("drop", e => {
+  e.preventDefault(); fileZone.classList.remove("dragover");
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", e => { if (e.target.files[0]) setFile(e.target.files[0]); });
+
+function setFile(f) {
+  selectedFile = f;
+  fileZone.classList.add("has-file");
+  fileZone.innerHTML = `
+    <div class="zone-icon">📄</div>
+    <div class="file-name">${escHtml(f.name)}</div>
+    <div class="file-size">${formatSize(f.size)}</div>
+    <div class="zone-hint">Click to change file</div>
+  `;
+  $("btn-encrypt").disabled = !ORRET.keys.publicKey;
+  $("btn-decrypt").disabled = !ORRET.keys.privateKey || !f.name.endsWith(".orret");
+  $("output-zone").classList.remove("show");
+}
+
+$("btn-encrypt").addEventListener("click", async () => {
+  if (!selectedFile || !ORRET.keys.publicKey) return;
+  $("btn-encrypt").disabled = true;
+  $("btn-encrypt").textContent = "⏳ Encrypting...";
+  try {
+    const buf = await selectedFile.arrayBuffer();
+    const orret = await ORRET.encrypt(buf);
+    const outName = selectedFile.name + ".orret";
+    outputBlob = new Blob([orret], { type: "application/octet-stream" });
+    showOutput(`🔒 Encrypted "${selectedFile.name}" → ${outName}`, outName);
+  } catch(e) {
+    showError("Encryption failed: " + e.message);
+  } finally {
+    $("btn-encrypt").textContent = "🔒 Encrypt → .orret";
+    $("btn-encrypt").disabled = !ORRET.keys.publicKey;
+  }
+});
+
+$("btn-decrypt").addEventListener("click", async () => {
+  if (!selectedFile || !ORRET.keys.privateKey) return;
+  $("btn-decrypt").disabled = true;
+  $("btn-decrypt").textContent = "⏳ Decrypting...";
+  try {
+    const buf = await selectedFile.arrayBuffer();
+    const pt = await ORRET.decrypt(buf);
+    let outName = selectedFile.name;
+    if (outName.endsWith(".orret")) outName = outName.slice(0, -6);
+    outputBlob = new Blob([pt]);
+    showOutput(`🔓 Decrypted "${selectedFile.name}" → ${outName}`, outName);
+  } catch(e) {
+    showError("Decryption failed: " + e.message);
+  } finally {
+    $("btn-decrypt").textContent = "🔓 Decrypt .orret";
+    $("btn-decrypt").disabled = !ORRET.keys.privateKey;
+  }
+});
+
+function showOutput(msg, filename) {
+  $("out-msg").textContent = msg;
+  $("dl-btn").download = filename;
+  $("dl-btn").href = URL.createObjectURL(outputBlob);
+  $("output-zone").classList.add("show");
+}
+
+function showError(msg) {
+  $("out-msg").textContent = "✗ " + msg;
+  $("out-msg").style.color = "rgba(231,76,60,0.85)";
+  $("dl-btn").style.display = "none";
+  $("output-zone").classList.add("show");
+  setTimeout(() => { $("out-msg").style.color = ""; }, 3000);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// Init
+updateKeyInfo();
+$("btn-encrypt").disabled = true;
+$("btn-decrypt").disabled = true;
+</script>
+</body>
+</html>

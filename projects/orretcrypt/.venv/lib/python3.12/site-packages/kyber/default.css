@@ -1,0 +1,44 @@
+@page {
+    size:8.5in 11in;
+    margin: 3cm 2cm;
+    padding-left: 1.5cm;
+    @top-center {
+        content: "Introduction to CSS 2.1";
+        width: 100%;
+        vertical-align: bottom;
+        border-bottom: .5pt solid;
+        margin-bottom: .7cm;
+    }
+    @bottom-right {
+        font-size: 80%;
+        content: "Page " counter(page) " of " counter(pages);
+    }
+    @left-top {
+        background: #005a9c; color: #fff; text-align: right;
+        padding-right: 2em; height: 1.5em; width: 10cm;
+        transform-origin: 100% 0;
+        transform: rotate(-90deg);
+    }
+}
+html, body {
+    font: 10pt/1.25 Droid Sans, sans-serif !important;
+    -weasy-hyphens: auto;
+}
+body {
+    text-align: justify; padding: 0 !important;
+    background: none !important; 
+}
+hr.navbar { display: none }
+h1 { page-break-before: auto !important; 
+    margin-top: 0 !important;
+    color: #007FFF;
+}
+h1, h2, h3, h4 { font-family: inherit !important }
+
+img {
+    image-resolution: 200dpi;
+}
+a {
+    color: #FF00FF;
+    text-decoration: none;
+}
