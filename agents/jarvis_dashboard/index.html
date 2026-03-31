@@ -1,0 +1,1638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS — OpenClaw Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --glass-bg: rgba(255,255,255,0.04);
+      --glass-border: rgba(255,255,255,0.08);
+      --glass-hover: rgba(255,255,255,0.08);
+      --orb-idle: #1a3a6a;
+      --orb-active: #f5a623;
+      --orb-error: #e74c3c;
+      --orb-listen: #4a9eff;
+      --text-primary: #ffffff;
+      --text-secondary: #8899aa;
+      --text-muted: #556677;
+      --accent-blue: #4a9eff;
+      --accent-amber: #f5a623;
+      --accent-green: #2ecc71;
+      --accent-red: #e74c3c;
+      --shadow: 0 8px 32px rgba(0,0,0,0.5);
+      --shadow-lg: 0 16px 64px rgba(0,0,0,0.6);
+      --radius: 24px;
+      --radius-sm: 12px;
+      --radius-xs: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      user-select: none;
+    }
+
+    /* ─── Background ──────────────────────────────────── */
+    #bg-mesh {
+      position: fixed; inset: 0; z-index: 0;
+      background: 
+        radial-gradient(ellipse 80% 60% at 20% 20%, rgba(74,158,255,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 80% at 80% 80%, rgba(245,166,35,0.05) 0%, transparent 60%),
+        var(--bg-primary);
+    }
+
+    /* ─── App Layout ───────────────────────────────────── */
+    #app {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-rows: 56px 1fr 48px;
+      grid-template-columns: 280px 1fr 300px;
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ─── Top Bar ──────────────────────────────────────── */
+    #topbar {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px;
+      background: var(--glass-bg);
+      border-bottom: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+    }
+
+    #topbar-left { display: flex; align-items: center; gap: 16px; }
+    #menu-btn {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-xs); cursor: pointer;
+      transition: all 0.2s;
+    }
+    #menu-btn:hover { background: var(--glass-hover); }
+    #menu-btn svg { width: 18px; height: 18px; fill: var(--text-secondary); }
+
+    #jarvis-title {
+      font-size: 16px; font-weight: 600;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-amber));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    #topbar-controls { display: flex; align-items: center; gap: 8px; }
+
+    .ctrl-btn {
+      width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm); cursor: pointer;
+      transition: all 0.2s; font-size: 16px;
+      position: relative;
+    }
+    .ctrl-btn:hover { background: var(--glass-hover); transform: scale(1.05); }
+    .ctrl-btn.active { background: rgba(74,158,255,0.2); border-color: var(--accent-blue); }
+    .ctrl-btn.active.amber { background: rgba(245,166,35,0.2); border-color: var(--accent-amber); }
+    .ctrl-btn.active.red { background: rgba(231,76,60,0.2); border-color: var(--accent-red); }
+
+    .ctrl-btn .tooltip {
+      position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      background: var(--bg-secondary); border: 1px solid var(--glass-border);
+      padding: 6px 12px; border-radius: var(--radius-xs); font-size: 11px;
+      white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+      z-index: 100;
+    }
+    .ctrl-btn:hover .tooltip { opacity: 1; }
+
+    #stop-btn { background: rgba(231,76,60,0.1); border-color: rgba(231,76,60,0.3); }
+    #stop-btn:hover { background: rgba(231,76,60,0.2); }
+
+    /* ─── Left Panel ───────────────────────────────────── */
+    #left-panel {
+      background: var(--glass-bg);
+      border-right: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-tabs {
+      display: flex; padding: 12px 12px 0;
+      gap: 4px; border-bottom: 1px solid var(--glass-border);
+    }
+    .panel-tab {
+      flex: 1; padding: 8px 4px; text-align: center;
+      font-size: 11px; font-weight: 500; color: var(--text-secondary);
+      cursor: pointer; border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+      transition: all 0.2s; border-bottom: 2px solid transparent;
+    }
+    .panel-tab:hover { color: var(--text-primary); }
+    .panel-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+
+    .panel-content { flex: 1; overflow-y: auto; padding: 12px; }
+    .panel-content::-webkit-scrollbar { width: 4px; }
+    .panel-content::-webkit-scrollbar-track { background: transparent; }
+    .panel-content::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 4px; }
+
+    /* Tasks */
+    .task-item {
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 8px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .task-item:hover { background: var(--glass-hover); border-color: rgba(74,158,255,0.3); }
+    .task-item.active { border-color: var(--accent-blue); background: rgba(74,158,255,0.1); }
+    
+    .task-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .task-status {
+      width: 8px; height: 8px; border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .task-status.pending { background: var(--text-muted); }
+    .task-status.running { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); animation: pulse 1.5s infinite; }
+    .task-status.done { background: var(--accent-blue); }
+    .task-status.failed { background: var(--accent-red); }
+
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .task-title { font-size: 12px; font-weight: 500; flex: 1; }
+    .task-time { font-size: 10px; color: var(--text-muted); }
+    .task-desc { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* Plan */
+    .plan-item {
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm); padding: 12px; margin-bottom: 8px;
+    }
+    .plan-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+    .plan-progress {
+      height: 4px; background: var(--glass-border); border-radius: 2px; overflow: hidden;
+    }
+    .plan-progress-bar {
+      height: 100%; background: linear-gradient(90deg, var(--accent-blue), var(--accent-amber));
+      border-radius: 2px; transition: width 0.5s ease;
+    }
+    .plan-steps { margin-top: 8px; }
+    .plan-step {
+      display: flex; align-items: center; gap: 8px; padding: 4px 0;
+      font-size: 11px; color: var(--text-secondary);
+    }
+    .plan-step.done { color: var(--accent-green); }
+    .plan-step.current { color: var(--accent-amber); font-weight: 500; }
+
+    /* Subagents */
+    .agent-item {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 8px;
+    }
+    .agent-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-amber));
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .agent-info { flex: 1; }
+    .agent-name { font-size: 12px; font-weight: 500; }
+    .agent-status { font-size: 10px; color: var(--text-muted); }
+    .agent-kill {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: rgba(231,76,60,0.2); border: 1px solid rgba(231,76,60,0.3);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 10px; color: var(--accent-red);
+      transition: all 0.2s;
+    }
+    .agent-kill:hover { background: rgba(231,76,60,0.4); }
+
+    /* Controls board */
+    .controls-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    }
+    .control-btn {
+      padding: 12px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm); cursor: pointer; text-align: center;
+      font-size: 11px; font-weight: 500; transition: all 0.2s;
+    }
+    .control-btn:hover { background: var(--glass-hover); border-color: var(--accent-blue); }
+    .control-btn:active { transform: scale(0.97); }
+
+    /* ─── Center ────────────────────────────────────────── */
+    #center {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+    }
+
+    /* Orb Container */
+    #orb-container {
+      position: relative; width: 320px; height: 320px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    #orb-canvas {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      border-radius: 50%;
+    }
+
+    #orb-core {
+      width: 120px; height: 120px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #3a7acc, var(--orb-idle));
+      box-shadow: 
+        0 0 60px rgba(74,158,255,0.4),
+        0 0 120px rgba(74,158,255,0.2),
+        inset 0 0 30px rgba(255,255,255,0.1);
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.5s ease;
+      z-index: 2;
+    }
+    #orb-core.speaking {
+      background: radial-gradient(circle at 35% 35%, #ffcc44, var(--orb-active));
+      box-shadow: 
+        0 0 80px rgba(245,166,35,0.5),
+        0 0 160px rgba(245,166,35,0.3),
+        inset 0 0 30px rgba(255,255,255,0.2);
+      transform: scale(1.08);
+    }
+    #orb-core.listening {
+      background: radial-gradient(circle at 35% 35%, #6ab4ff, #2a7acc);
+      box-shadow: 
+        0 0 70px rgba(74,158,255,0.5),
+        0 0 140px rgba(74,158,255,0.25);
+      transform: scale(1.03);
+    }
+    #orb-core.thinking {
+      background: radial-gradient(circle at 35% 35%, #88ccff, #2266aa);
+      box-shadow: 
+        0 0 70px rgba(100,180,255,0.5),
+        0 0 140px rgba(100,180,255,0.25);
+      animation: thinkPulse 0.8s infinite alternate;
+    }
+    #orb-core.error {
+      background: radial-gradient(circle at 35% 35%, #ff6666, var(--orb-error));
+      box-shadow: 0 0 80px rgba(231,76,60,0.5);
+    }
+
+    @keyframes thinkPulse {
+      from { box-shadow: 0 0 70px rgba(100,180,255,0.5), 0 0 140px rgba(100,180,255,0.25); }
+      to { box-shadow: 0 0 90px rgba(150,200,255,0.6), 0 0 180px rgba(150,200,255,0.3); }
+    }
+
+    #orb-icon {
+      font-size: 36px; opacity: 0.9; transition: all 0.3s;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    }
+
+    #orb-label {
+      position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+      background: var(--bg-secondary); border: 1px solid var(--glass-border);
+      padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: 500;
+      color: var(--text-secondary); white-space: nowrap;
+    }
+
+    /* Waveform ring */
+    #waveform-ring {
+      position: absolute; inset: -20px;
+      border-radius: 50%;
+      border: 2px solid rgba(74,158,255,0.2);
+      opacity: 0; transition: opacity 0.3s;
+    }
+    #waveform-ring.active { opacity: 1; animation: ringPulse 2s infinite; }
+    @keyframes ringPulse {
+      0% { transform: scale(1); opacity: 0.5; }
+      50% { transform: scale(1.1); opacity: 0.2; }
+      100% { transform: scale(1); opacity: 0.5; }
+    }
+
+    /* Chat Input */
+    #chat-container {
+      width: 90%; max-width: 500px; position: relative;
+    }
+
+    #chat-input-row {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: 28px; padding: 6px 6px 6px 20px;
+      backdrop-filter: blur(20px);
+      transition: all 0.3s;
+    }
+    #chat-input-row:focus-within {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 20px rgba(74,158,255,0.15);
+    }
+
+    #chat-input {
+      flex: 1; background: none; border: none; outline: none;
+      color: var(--text-primary); font-size: 14px; font-family: inherit;
+    }
+    #chat-input::placeholder { color: var(--text-muted); }
+
+    #mic-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--accent-blue); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; flex-shrink: 0;
+    }
+    #mic-btn:hover { transform: scale(1.08); background: #5aadff; }
+    #mic-btn.recording {
+      background: var(--accent-red); animation: micPulse 1s infinite;
+    }
+    @keyframes micPulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.4); }
+      50% { box-shadow: 0 0 0 12px rgba(231,76,60,0); }
+    }
+    #mic-btn svg { width: 18px; height: 18px; fill: white; }
+
+    #send-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--glass-hover); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; flex-shrink: 0;
+    }
+    #send-btn:hover { background: var(--accent-blue); }
+    #send-btn svg { width: 16px; height: 16px; fill: var(--text-primary); }
+
+    /* Subtitles */
+    #subtitle {
+      text-align: center; margin-top: 12px;
+      font-size: 12px; color: var(--text-secondary);
+      min-height: 18px; max-width: 400px;
+      transition: all 0.3s; opacity: 0.8;
+    }
+    #subtitle.agent { color: var(--accent-amber); font-style: italic; }
+
+    /* Activity popup (center overlay) */
+    #activity-popup {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--radius); padding: 20px; max-width: 400px;
+      backdrop-filter: blur(30px); display: none; z-index: 50;
+      box-shadow: var(--shadow-lg);
+    }
+    #activity-popup.visible { display: block; animation: popIn 0.3s ease; }
+    @keyframes popIn {
+      from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+    #activity-popup-close {
+      position: absolute; top: 10px; right: 10px;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--glass-hover); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    #activity-popup-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+    #activity-popup-content { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+    /* ─── Right Panel ──────────────────────────────────── */
+    #right-panel {
+      background: var(--glass-bg);
+      border-left: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    #agent-status-panel {
+      padding: 16px; border-bottom: 1px solid var(--glass-border);
+    }
+    .status-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .status-icon {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-amber));
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+      animation: statusGlow 2s infinite alternate;
+    }
+    @keyframes statusGlow {
+      from { box-shadow: 0 0 10px rgba(74,158,255,0.3); }
+      to { box-shadow: 0 0 20px rgba(74,158,255,0.5); }
+    }
+    .status-info { flex: 1; }
+    .status-label { font-size: 11px; color: var(--text-muted); }
+    .status-text { font-size: 13px; font-weight: 500; }
+    .status-text.thinking { color: var(--accent-amber); }
+    .status-text.speaking { color: var(--accent-blue); }
+
+    /* Live log */
+    #live-log {
+      flex: 1; overflow-y: auto; padding: 12px;
+    }
+    #live-log::-webkit-scrollbar { width: 4px; }
+    #live-log::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 4px; }
+
+    .log-entry {
+      display: flex; gap: 8px; margin-bottom: 8px; padding: 8px;
+      background: var(--glass-bg); border-radius: var(--radius-xs);
+      font-size: 11px; animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .log-time { color: var(--text-muted); flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+    .log-type {
+      padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 600;
+      flex-shrink: 0;
+    }
+    .log-type.action { background: rgba(74,158,255,0.2); color: var(--accent-blue); }
+    .log-type.think { background: rgba(245,166,35,0.2); color: var(--accent-amber); }
+    .log-type.file { background: rgba(46,204,113,0.2); color: var(--accent-green); }
+    .log-type.error { background: rgba(231,76,60,0.2); color: var(--accent-red); }
+    .log-type.web { background: rgba(155,89,182,0.2); color: #bb88dd; }
+    .log-msg { color: var(--text-secondary); flex: 1; line-height: 1.4; }
+
+    /* Calendar */
+    #calendar-panel {
+      border-top: 1px solid var(--glass-border); padding: 12px;
+    }
+    .cal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .cal-title { font-size: 12px; font-weight: 600; }
+    .cal-nav { display: flex; gap: 4px; }
+    .cal-nav button {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: var(--text-secondary);
+    }
+    .cal-nav button:hover { background: var(--glass-hover); }
+    .cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+    }
+    .cal-day-header { text-align: center; font-size: 9px; color: var(--text-muted); padding: 4px; }
+    .cal-day {
+      aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; border-radius: 6px; cursor: pointer;
+      color: var(--text-secondary); transition: all 0.2s;
+    }
+    .cal-day:hover { background: var(--glass-hover); color: var(--text-primary); }
+    .cal-day.today { background: rgba(74,158,255,0.2); color: var(--accent-blue); font-weight: 600; }
+    .cal-day.has-event { background: rgba(245,166,35,0.15); color: var(--accent-amber); }
+    .cal-day.past { opacity: 0.4; }
+
+    /* ─── Bottom Tabs ───────────────────────────────────── */
+    #bottom-tabs {
+      grid-column: 1 / -1;
+      display: flex; align-items: center;
+      padding: 0 20px; gap: 8px;
+      background: var(--glass-bg); border-top: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+    }
+    .bottom-tab {
+      padding: 8px 16px; border-radius: var(--radius-xs);
+      font-size: 12px; font-weight: 500; color: var(--text-secondary);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .bottom-tab:hover { color: var(--text-primary); background: var(--glass-hover); }
+    .bottom-tab.active { color: var(--accent-blue); background: rgba(74,158,255,0.1); }
+    #bottom-tabs-spacer { flex: 1; }
+    #connection-status {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: var(--text-muted);
+    }
+    .conn-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green);
+    }
+    .conn-dot.offline { background: var(--accent-red); box-shadow: 0 0 6px var(--accent-red); }
+
+    /* ─── Floating Layers ────────────────────────────────── */
+    .floating-layer {
+      position: fixed; z-index: 200;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--radius); backdrop-filter: blur(30px);
+      box-shadow: var(--shadow-lg);
+      display: none;
+    }
+    .floating-layer.visible { display: block; }
+
+    /* Virtual Keyboard */
+    #virtual-keyboard {
+      bottom: 80px; left: 50%; transform: translateX(-50%);
+      width: 700px; padding: 16px;
+    }
+    .vk-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .vk-title { font-size: 12px; font-weight: 600; }
+    .vk-close {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--glass-hover); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    .vk-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 6px; }
+    .vk-key {
+      min-width: 44px; height: 44px; border-radius: 8px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .vk-key:hover { background: var(--glass-hover); transform: translateY(-2px); }
+    .vk-key:active { transform: translateY(1px); background: var(--accent-blue); }
+    .vk-key.space { min-width: 300px; }
+    .vk-key.special { font-size: 11px; color: var(--text-secondary); }
+
+    /* Drawing Canvas */
+    #drawing-layer {
+      top: 60px; left: 20px; right: 20px; bottom: 60px;
+    }
+    #drawing-layer-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border-bottom: 1px solid var(--glass-border);
+    }
+    #drawing-canvas {
+      width: 100%; height: calc(100% - 50px);
+      cursor: crosshair;
+    }
+    #camera-feed {
+      position: fixed; bottom: 80px; right: 20px;
+      width: 240px; height: 180px; border-radius: var(--radius);
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      overflow: hidden; z-index: 150; display: none;
+    }
+    #camera-feed video { width: 100%; height: 100%; object-fit: cover; }
+    #camera-feed.visible { display: block; }
+
+    /* Agent popup request */
+    #agent-popup {
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 380px; padding: 24px;
+    }
+    .popup-icon { font-size: 32px; margin-bottom: 12px; text-align: center; }
+    .popup-title { font-size: 15px; font-weight: 600; text-align: center; margin-bottom: 8px; }
+    .popup-msg { font-size: 13px; color: var(--text-secondary); text-align: center; line-height: 1.5; margin-bottom: 16px; }
+    .popup-input {
+      width: 100%; padding: 10px 14px; border-radius: var(--radius-sm);
+      background: var(--bg-secondary); border: 1px solid var(--glass-border);
+      color: var(--text-primary); font-size: 14px; outline: none;
+      margin-bottom: 12px;
+    }
+    .popup-input:focus { border-color: var(--accent-blue); }
+    .popup-buttons { display: flex; gap: 8px; }
+    .popup-btn {
+      flex: 1; padding: 10px; border-radius: var(--radius-sm); border: none;
+      font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+    }
+    .popup-btn.primary { background: var(--accent-blue); color: white; }
+    .popup-btn.primary:hover { background: #5aadff; }
+    .popup-btn.secondary { background: var(--glass-hover); color: var(--text-primary); }
+    .popup-btn.secondary:hover { background: var(--glass-border); }
+
+    /* Scheduled interface */
+    .scheduled-window {
+      padding: 16px; min-width: 300px; max-width: 400px;
+    }
+    .scheduled-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .scheduled-title { font-size: 14px; font-weight: 600; }
+    .scheduled-close {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--glass-hover); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    .scheduled-content { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+    .scheduled-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .scheduled-action {
+      flex: 1; padding: 10px; border-radius: var(--radius-sm);
+      background: var(--glass-hover); border: 1px solid var(--glass-border);
+      color: var(--text-primary); font-size: 12px; cursor: pointer; text-align: center;
+    }
+    .scheduled-action:hover { border-color: var(--accent-blue); }
+
+    /* ─── Focus Mode ────────────────────────────────────── */
+    #focus-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);
+      display: none;
+    }
+    #focus-overlay.visible { display: block; }
+    #focus-content {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 101; max-width: 90vw; max-height: 80vh;
+    }
+
+    /* ─── Scrollbars ────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<div id="bg-mesh"></div>
+
+<div id="app">
+  <!-- Top Bar -->
+  <div id="topbar">
+    <div id="topbar-left">
+      <div id="menu-btn">
+        <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+      </div>
+      <div id="jarvis-title">JARVIS</div>
+    </div>
+    <div id="topbar-controls">
+      <button class="ctrl-btn" id="voice-btn" title="Voice Mode">
+        🎤
+        <span class="tooltip">Voice</span>
+      </button>
+      <button class="ctrl-btn" id="camera-btn" title="Camera Mode">
+        📷
+        <span class="tooltip">Camera</span>
+      </button>
+      <button class="ctrl-btn" id="keyboard-btn" title="Virtual Keyboard">
+        ⌨
+        <span class="tooltip">Keyboard</span>
+      </button>
+      <button class="ctrl-btn red" id="stop-btn" title="Stop Agent">
+        ⏹
+        <span class="tooltip">Stop</span>
+      </button>
+      <button class="ctrl-btn" id="focus-btn" title="Focus Mode">
+        🔍
+        <span class="tooltip">Focus</span>
+      </button>
+      <button class="ctrl-btn" id="settings-btn" title="Settings">
+        ⚙
+        <span class="tooltip">Settings</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Left Panel -->
+  <div id="left-panel">
+    <div class="panel-tabs">
+      <div class="panel-tab active" data-tab="tasks">Tasks</div>
+      <div class="panel-tab" data-tab="plan">Plan</div>
+      <div class="panel-tab" data-tab="subagents">Agents</div>
+      <div class="panel-tab" data-tab="controls">Controls</div>
+    </div>
+    <div class="panel-content" id="left-content">
+      <!-- Dynamic content loaded here -->
+    </div>
+  </div>
+
+  <!-- Center -->
+  <div id="center">
+    <div id="orb-container">
+      <canvas id="orb-canvas"></canvas>
+      <div id="waveform-ring"></div>
+      <div id="orb-core">
+        <span id="orb-icon">🧠</span>
+      </div>
+      <div id="orb-label">Ready</div>
+    </div>
+
+    <div id="chat-container">
+      <div id="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Ask JARVIS anything..." autocomplete="off">
+        <button id="mic-btn">
+          <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
+        </button>
+        <button id="send-btn">
+          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+      <div id="subtitle">Ready to assist</div>
+    </div>
+
+    <div id="activity-popup">
+      <button id="activity-popup-close">✕</button>
+      <div id="activity-popup-title">Current Focus</div>
+      <div id="activity-popup-content"></div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div id="right-panel">
+    <div id="agent-status-panel">
+      <div class="status-header">
+        <div class="status-icon">🤖</div>
+        <div class="status-info">
+          <div class="status-label">Agent Status</div>
+          <div class="status-text" id="agent-status-text">Idle</div>
+        </div>
+      </div>
+    </div>
+    <div id="live-log"></div>
+    <div id="calendar-panel">
+      <div class="cal-header">
+        <div class="cal-title" id="cal-month-title">March 2026</div>
+        <div class="cal-nav">
+          <button id="cal-prev">‹</button>
+          <button id="cal-next">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+  </div>
+
+  <!-- Bottom Tabs -->
+  <div id="bottom-tabs">
+    <div class="bottom-tab active" data-view="main">Main</div>
+    <div class="bottom-tab" data-view="agents">Subagents</div>
+    <div class="bottom-tab" data-view="files">Files</div>
+    <div class="bottom-tab" data-view="logs">Logs</div>
+    <div class="bottom-tab" data-view="schedule">Schedule</div>
+    <div id="bottom-tabs-spacer"></div>
+    <div id="connection-status">
+      <div class="conn-dot" id="conn-dot"></div>
+      <span id="conn-text">Connected</span>
+    </div>
+  </div>
+</div>
+
+<!-- Floating Layers -->
+<div id="focus-overlay"></div>
+
+<!-- Virtual Keyboard -->
+<div id="virtual-keyboard" class="floating-layer">
+  <div class="vk-header">
+    <div class="vk-title">Virtual Keyboard</div>
+    <button class="vk-close" id="vk-close">✕</button>
+  </div>
+  <div id="vk-keys"></div>
+</div>
+
+<!-- Drawing Layer -->
+<div id="drawing-layer" class="floating-layer">
+  <div id="drawing-layer-header">
+    <div class="vk-title">🎨 Drawing Mode — Show with finger or draw</div>
+    <button class="vk-close" id="drawing-close">✕</button>
+  </div>
+  <canvas id="drawing-canvas"></canvas>
+</div>
+
+<!-- Camera Feed PiP -->
+<div id="camera-feed">
+  <video id="camera-video" autoplay playsinline muted></video>
+</div>
+
+<!-- Agent Popup Request -->
+<div id="agent-popup" class="floating-layer">
+  <div class="popup-icon" id="popup-icon">🔐</div>
+  <div class="popup-title" id="popup-title">Password Required</div>
+  <div class="popup-msg" id="popup-msg">Enter password to continue</div>
+  <input type="password" class="popup-input" id="popup-input" placeholder="Password">
+  <div class="popup-buttons">
+    <button class="popup-btn secondary" id="popup-cancel">Cancel</button>
+    <button class="popup-btn primary" id="popup-confirm">Confirm</button>
+  </div>
+</div>
+
+<!-- Scheduled Windows Container -->
+<div id="scheduled-windows"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// JARVIS Dashboard — Core Logic
+// ════════════════════════════════════════════════════════════
+
+const JARVIS = {
+  state: {
+    mode: 'idle', // idle | listening | thinking | speaking | error
+    voiceEnabled: false,
+    cameraEnabled: false,
+    keyboardEnabled: false,
+    focusMode: false,
+    cameraStream: null,
+    orbState: 'idle',
+    currentTask: null,
+    tasks: [],
+    plan: null,
+    subagents: [],
+    activityLog: [],
+    scheduledWindows: [],
+    calendarEvents: [],
+    controlButtons: [],
+    lastAgentMessage: '',
+    drawingColor: '#4a9eff',
+    isDrawing: false,
+  },
+
+  // ─── Orb Particle System ─────────────────────────────────
+  particles: [],
+  canvas: null,
+  ctx: null,
+  animFrame: null,
+
+  initOrb() {
+    this.canvas = document.getElementById('orb-canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.resizeOrb();
+    window.addEventListener('resize', () => this.resizeOrb());
+    this.initParticles();
+    this.animate();
+  },
+
+  resizeOrb() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    this.canvas.width = rect.width * dpr;
+    this.canvas.height = rect.height * dpr;
+    this.ctx.scale(dpr, dpr);
+    this.centerX = rect.width / 2;
+    this.centerY = rect.height / 2;
+    this.radius = Math.min(rect.width, rect.height) / 2 - 10;
+  },
+
+  initParticles() {
+    this.particles = [];
+    const count = window.innerWidth < 800 ? 150 : 280;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = this.radius * (0.3 + Math.random() * 0.7);
+      this.particles.push({
+        x: this.centerX + Math.cos(angle) * dist,
+        y: this.centerY + Math.sin(angle) * dist,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
+        size: 1 + Math.random() * 2.5,
+        alpha: 0.3 + Math.random() * 0.5,
+        angle,
+        dist,
+        speed: 0.002 + Math.random() * 0.008,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+  },
+
+  getColors() {
+    const colors = {
+      idle: { inner: [26, 58, 106], outer: [74, 158, 255], glow: 'rgba(74,158,255,0.4)' },
+      listening: { inner: [42, 122, 204], outer: [106, 180, 255], glow: 'rgba(106,180,255,0.5)' },
+      speaking: { inner: [200, 140, 20], outer: [255, 204, 0], glow: 'rgba(245,166,35,0.5)' },
+      thinking: { inner: [34, 102, 170], outer: [136, 204, 255], glow: 'rgba(136,204,255,0.5)' },
+      error: { inner: [150, 40, 40], outer: [231, 76, 60], glow: 'rgba(231,76,60,0.5)' },
+    };
+    return colors[this.state.orbState] || colors.idle;
+  },
+
+  animate() {
+    const { ctx, canvas, centerX, centerY, radius } = this;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+    ctx.clearRect(0, 0, w, h);
+
+    const colors = this.getColors();
+    const time = Date.now() * 0.001;
+    const speedMult = this.state.orbState === 'thinking' ? 3 : 
+                       this.state.orbState === 'speaking' ? 2 : 1;
+
+    // Draw outer glow
+    const grd = ctx.createRadialGradient(centerX, centerY, radius * 0.5, centerX, centerY, radius * 1.4);
+    grd.addColorStop(0, colors.glow);
+    grd.addColorStop(1, 'transparent');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, w, h);
+
+    // Update and draw particles
+    for (const p of this.particles) {
+      p.angle += p.speed * speedMult;
+      p.phase += 0.02 * speedMult;
+
+      // Breathing effect
+      const breathe = this.state.orbState === 'speaking' ? Math.sin(p.phase * 3) * 15 :
+                      this.state.orbState === 'thinking' ? Math.sin(p.phase * 2) * 8 : 0;
+      const targetDist = p.dist + breathe;
+
+      const targetX = centerX + Math.cos(p.angle) * targetDist;
+      const targetY = centerY + Math.sin(p.angle) * targetDist;
+
+      p.x += (targetX - p.x) * 0.08;
+      p.y += (targetY - p.y) * 0.08;
+
+      // Add noise in speaking mode
+      if (this.state.orbState === 'speaking') {
+        p.x += (Math.random() - 0.5) * 3;
+        p.y += (Math.random() - 0.5) * 3;
+      }
+
+      // Draw particle
+      const alpha = p.alpha * (0.7 + Math.sin(p.phase) * 0.3);
+      const [r, g, b] = colors.outer;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * (this.state.orbState === 'speaking' ? 1.5 : 1), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.fill();
+    }
+
+    this.animFrame = requestAnimationFrame(() => this.animate());
+  },
+
+  setOrbState(state) {
+    this.state.orbState = state;
+    const core = document.getElementById('orb-core');
+    const label = document.getElementById('orb-label');
+    const ring = document.getElementById('waveform-ring');
+    const icon = document.getElementById('orb-icon');
+
+    core.className = state;
+    ring.className = state !== 'idle' ? 'active' : '';
+
+    const labels = {
+      idle: 'Ready', listening: 'Listening...', thinking: 'Thinking...',
+      speaking: 'Speaking...', error: 'Error'
+    };
+    const icons = {
+      idle: '🧠', listening: '👂', thinking: '💭',
+      speaking: '💬', error: '⚠️'
+    };
+    label.textContent = labels[state] || state;
+    icon.textContent = icons[state] || '🧠';
+  },
+
+  // ─── Voice Detection ───────────────────────────────────────
+  audioCtx: null,
+  analyser: null,
+  mediaStream: null,
+
+  async toggleVoice() {
+    const btn = document.getElementById('voice-btn');
+    if (this.state.voiceEnabled) {
+      this.state.voiceEnabled = false;
+      btn.classList.remove('active');
+      this.setOrbState('idle');
+      if (this.mediaStream) {
+        this.mediaStream.getTracks().forEach(t => t.stop());
+        this.mediaStream = null;
+      }
+    } else {
+      try {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this.analyser = this.audioCtx.createAnalyser();
+        const source = this.audioCtx.createMediaStreamSource(this.mediaStream);
+        source.connect(this.analyser);
+        this.analyser.fftSize = 256;
+
+        this.state.voiceEnabled = true;
+        btn.classList.add('active');
+        this.listenLoop();
+      } catch (e) {
+        console.log('Mic access denied:', e);
+        this.addLog('error', 'Microphone access denied');
+      }
+    }
+  },
+
+  listenLoop() {
+    if (!this.state.voiceEnabled || !this.analyser) return;
+
+    const data = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(data);
+    const avg = data.reduce((a, b) => a + b, 0) / data.length;
+
+    if (avg > 20) {
+      if (this.state.orbState !== 'speaking') this.setOrbState('listening');
+    } else if (this.state.orbState === 'listening') {
+      this.setOrbState('thinking');
+    }
+
+    setTimeout(() => this.listenLoop(), 100);
+  },
+
+  // ─── Camera ────────────────────────────────────────────────
+  async toggleCamera() {
+    const btn = document.getElementById('camera-btn');
+    const feed = document.getElementById('camera-feed');
+    const video = document.getElementById('camera-video');
+
+    if (this.state.cameraEnabled) {
+      this.state.cameraEnabled = false;
+      btn.classList.remove('active');
+      feed.classList.remove('visible');
+      if (this.state.cameraStream) {
+        this.state.cameraStream.getTracks().forEach(t => t.stop());
+        this.state.cameraStream = null;
+      }
+    } else {
+      try {
+        this.state.cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: 640, height: 480 }
+        });
+        video.srcObject = this.state.cameraStream;
+        this.state.cameraEnabled = true;
+        btn.classList.add('active');
+        feed.classList.add('visible');
+        this.startHandDetection();
+      } catch (e) {
+        console.log('Camera access denied:', e);
+        this.addLog('error', 'Camera access denied');
+      }
+    }
+  },
+
+  startHandDetection() {
+    // Simple motion detection via canvas (MediaPipe would need external lib)
+    // For now, just show camera feed — hand tracking is a future enhancement
+    const video = document.getElementById('camera-video');
+    // Hand tracking will be added when MediaPipe is loaded
+  },
+
+  // ─── Virtual Keyboard ───────────────────────────────────────
+  initKeyboard() {
+    const vk = document.getElementById('virtual-keyboard');
+    const keysContainer = document.getElementById('vk-keys');
+    const rows = [
+      ['`','1','2','3','4','5','6','7','8','9','0','-','=','⌫'],
+      ['Tab','q','w','e','r','t','y','u','i','o','p','[',']','\\'],
+      ['a','s','d','f','g','h','j','k','l',';',"'",'Enter'],
+      ['Shift','z','x','c','v','b','n','m',',','.','/','Shift'],
+      ['Ctrl','Alt','Space']
+    ];
+
+    for (const row of rows) {
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'vk-row';
+      for (const key of row) {
+        const k = document.createElement('div');
+        k.className = 'vk-key' + (key === 'Space' ? ' space' : '') +
+                      (['Tab','Enter','Shift','Ctrl','Alt','⌫'].includes(key) ? ' special' : '');
+        k.textContent = key;
+        k.addEventListener('click', () => this.onKeyPress(key));
+        rowDiv.appendChild(k);
+      }
+      keysContainer.appendChild(rowDiv);
+    }
+  },
+
+  onKeyPress(key) {
+    const input = document.getElementById('chat-input');
+    const specialKeys = { '⌫': 'Backspace', 'Tab': 'Tab', 'Enter': 'Enter', 'Space': ' ' };
+    const k = specialKeys[key] || key;
+    
+    if (k === 'Backspace') {
+      input.value = input.value.slice(0, -1);
+    } else if (k === 'Tab') {
+      input.value += '  ';
+    } else if (k.length === 1) {
+      input.value += k;
+    }
+    input.focus();
+  },
+
+  toggleKeyboard() {
+    const vk = document.getElementById('virtual-keyboard');
+    const btn = document.getElementById('keyboard-btn');
+    this.state.keyboardEnabled = !this.state.keyboardEnabled;
+    
+    if (this.state.keyboardEnabled) {
+      vk.classList.add('visible');
+      btn.classList.add('active');
+    } else {
+      vk.classList.remove('visible');
+      btn.classList.remove('active');
+    }
+  },
+
+  // ─── Drawing Canvas ───────────────────────────────────────
+  drawingCtx: null,
+
+  initDrawing() {
+    const canvas = document.getElementById('drawing-canvas');
+    const layer = document.getElementById('drawing-layer');
+    canvas.width = layer.clientWidth;
+    canvas.height = layer.clientHeight - 50;
+    this.drawingCtx = canvas.getContext('2d');
+    this.drawingCtx.strokeStyle = this.state.drawingColor;
+    this.drawingCtx.lineWidth = 3;
+    this.drawingCtx.lineCap = 'round';
+
+    let drawing = false;
+    let lastX = 0, lastY = 0;
+
+    canvas.addEventListener('mousedown', e => {
+      drawing = true;
+      [lastX, lastY] = [e.offsetX, e.offsetY];
+    });
+    canvas.addEventListener('mousemove', e => {
+      if (!drawing) return;
+      this.drawingCtx.beginPath();
+      this.drawingCtx.moveTo(lastX, lastY);
+      this.drawingCtx.lineTo(e.offsetX, e.offsetY);
+      this.drawingCtx.stroke();
+      [lastX, lastY] = [e.offsetX, e.offsetY];
+    });
+    canvas.addEventListener('mouseup', () => drawing = false);
+    canvas.addEventListener('mouseleave', () => drawing = false);
+
+    // Touch support
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault();
+      drawing = true;
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      [lastX, lastY] = [touch.clientX - rect.left, touch.clientY - rect.top];
+    });
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (!drawing) return;
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left, y = touch.clientY - rect.top;
+      this.drawingCtx.beginPath();
+      this.drawingCtx.moveTo(lastX, lastY);
+      this.drawingCtx.lineTo(x, y);
+      this.drawingCtx.stroke();
+      [lastX, lastY] = [x, y];
+    });
+    canvas.addEventListener('touchend', () => drawing = false);
+  },
+
+  toggleDrawing() {
+    const layer = document.getElementById('drawing-layer');
+    const btn = document.getElementById('camera-btn');
+    if (layer.classList.contains('visible')) {
+      layer.classList.remove('visible');
+      btn.classList.remove('active');
+    } else {
+      layer.classList.add('visible');
+      btn.classList.add('active');
+      this.initDrawing();
+    }
+  },
+
+  // ─── Calendar ──────────────────────────────────────────────
+  calMonth: new Date().getMonth(),
+  calYear: new Date().getFullYear(),
+
+  renderCalendar() {
+    const grid = document.getElementById('cal-grid');
+    const title = document.getElementById('cal-month-title');
+    const months = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+    
+    title.textContent = `${months[this.calMonth]} ${this.calYear}`;
+    grid.innerHTML = '';
+
+    const days = ['M','T','W','T','F','S','S'];
+    for (const d of days) {
+      const el = document.createElement('div');
+      el.className = 'cal-day-header';
+      el.textContent = d;
+      grid.appendChild(el);
+    }
+
+    const firstDay = new Date(this.calYear, this.calMonth, 1).getDay();
+    const daysInMonth = new Date(this.calYear, this.calMonth + 1, 0).getDate();
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+
+    // Offset for Monday start
+    const offset = firstDay === 0 ? 6 : firstDay - 1;
+    for (let i = 0; i < offset; i++) {
+      grid.appendChild(document.createElement('div'));
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const el = document.createElement('div');
+      el.className = 'cal-day';
+      el.textContent = d;
+      
+      const dateStr = `${this.calYear}-${this.calMonth}-${d}`;
+      const isToday = dateStr === todayStr;
+      if (isToday) el.classList.add('today');
+      
+      const hasEvent = this.state.calendarEvents.some(e => e.date === dateStr);
+      if (hasEvent) el.classList.add('has-event');
+      
+      el.addEventListener('click', () => this.onCalDayClick(d, dateStr));
+      grid.appendChild(el);
+    }
+  },
+
+  onCalDayClick(day, dateStr) {
+    // Show events for this day
+    const events = this.state.calendarEvents.filter(e => e.date === dateStr);
+    if (events.length) {
+      const msg = events.map(e => `• ${e.time}: ${e.title}`).join('\n');
+      this.showAgentPopup('📅', `Events on ${dateStr}`, msg, [], false);
+    }
+  },
+
+  // ─── Activity Log ──────────────────────────────────────────
+  addLog(type, msg) {
+    const log = document.getElementById('live-log');
+    const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `
+      <span class="log-time">${time}</span>
+      <span class="log-type ${type}">${type.toUpperCase()}</span>
+      <span class="log-msg">${msg}</span>
+    `;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+
+    // Keep max 50 entries
+    while (log.children.length > 50) log.removeChild(log.firstChild);
+    this.state.activityLog.push({ time, type, msg });
+  },
+
+  // ─── Agent Popup ───────────────────────────────────────────
+  popupCallback: null,
+
+  showAgentPopup(icon, title, msg, buttons = [], showInput = false, callback = null) {
+    const popup = document.getElementById('agent-popup');
+    document.getElementById('popup-icon').textContent = icon;
+    document.getElementById('popup-title').textContent = title;
+    document.getElementById('popup-msg').textContent = msg;
+    
+    const input = document.getElementById('popup-input');
+    input.style.display = showInput ? 'block' : 'none';
+    if (showInput) input.value = '';
+    
+    const btnContainer = document.querySelector('.popup-buttons');
+    btnContainer.innerHTML = '';
+    
+    if (buttons.length === 0) buttons = [{ label: 'OK', primary: true }];
+    for (const b of buttons) {
+      const btn = document.createElement('button');
+      btn.className = `popup-btn ${b.primary ? 'primary' : 'secondary'}`;
+      btn.textContent = b.label;
+      btn.addEventListener('click', () => {
+        popup.classList.remove('visible');
+        if (callback) callback(b.label, showInput ? input.value : null);
+      });
+      btnContainer.appendChild(btn);
+    }
+
+    this.popupCallback = callback;
+    popup.classList.add('visible');
+    if (showInput) input.focus();
+  },
+
+  // ─── Agent Status ──────────────────────────────────────────
+  setAgentStatus(text, state = '') {
+    const el = document.getElementById('agent-status-text');
+    el.textContent = text;
+    el.className = 'status-text ' + state;
+    if (state) this.setOrbState(state);
+  },
+
+  // ─── Tasks Panel ───────────────────────────────────────────
+  renderTasks() {
+    const content = document.getElementById('left-content');
+    const tasks = this.state.tasks.length ? this.state.tasks : [
+      { id: 1, title: 'Monitor services', status: 'running', desc: 'Check 8 ports every 15 min' },
+      { id: 2, title: 'Ruche data collection', status: 'pending', desc: 'Collect from GitHub, arXiv daily' },
+      { id: 3, title: 'Fine-tune Orret model', status: 'pending', desc: 'Qwen2.5-7B on Colab TPU' },
+      { id: 4, title: 'Build NEXUS dashboard', status: 'done', desc: 'Web dashboard v1.0 complete' },
+    ];
+
+    content.innerHTML = tasks.map(t => `
+      <div class="task-item${t.status === 'running' ? ' active' : ''}" data-id="${t.id}">
+        <div class="task-header">
+          <div class="task-status ${t.status}"></div>
+          <div class="task-title">${t.title}</div>
+          <div class="task-time">${t.status === 'running' ? 'running' : t.status}</div>
+        </div>
+        <div class="task-desc">${t.desc || ''}</div>
+      </div>
+    `).join('');
+
+    // Click to expand
+    content.querySelectorAll('.task-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.dataset.id;
+        const task = tasks.find(t => String(t.id) === String(id));
+        if (task) {
+          this.showAgentPopup('📋', task.title, task.desc || 'No description', [
+            { label: 'View Details' }, { label: 'Cancel', primary: true }
+          ], false);
+        }
+      });
+    });
+  },
+
+  renderPlan() {
+    const content = document.getElementById('left-content');
+    const plan = this.state.plan || {
+      title: 'SOE System Bootstrap',
+      progress: 65,
+      steps: [
+        { text: 'Infrastructure (NEXUS, services)', done: true },
+        { text: 'Data pipeline (Ruche, .loop)', done: true },
+        { text: 'Provider system', done: true },
+        { text: 'Fine-tune model (Colab)', done: false },
+        { text: 'ARIA/SOMA architecture', done: false },
+        { text: 'Production deployment', done: false },
+      ]
+    };
+
+    const currentStep = plan.steps.findIndex(s => !s.done);
+
+    content.innerHTML = `
+      <div class="plan-item">
+        <div class="plan-title">${plan.title}</div>
+        <div class="plan-progress"><div class="plan-progress-bar" style="width:${plan.progress}%"></div></div>
+        <div class="plan-steps">
+          ${plan.steps.map((s, i) => `
+            <div class="plan-step ${s.done ? 'done' : i === currentStep ? 'current' : ''}">
+              ${s.done ? '✓' : i === currentStep ? '▶' : '○'} ${s.text}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  },
+
+  renderSubagents() {
+    const content = document.getElementById('left-content');
+    const agents = this.state.subagents.length ? this.state.subagents : [
+      { name: 'CLAW-PRIME', status: 'Running', task: 'Infrastructure maintenance' },
+      { name: 'Research-Agent', status: 'Idle', task: 'Awaiting tasks' },
+    ];
+
+    content.innerHTML = agents.map(a => `
+      <div class="agent-item">
+        <div class="agent-avatar">${a.name[0]}</div>
+        <div class="agent-info">
+          <div class="agent-name">${a.name}</div>
+          <div class="agent-status">${a.status} — ${a.task}</div>
+        </div>
+        <div class="agent-kill" title="Stop agent">✕</div>
+      </div>
+    `).join('');
+  },
+
+  renderControls() {
+    const content = document.getElementById('left-content');
+    const btns = this.state.controlButtons.length ? this.state.controlButtons : [
+      { label: '🔄 Restart NEXUS', action: 'restart_nexus' },
+      { label: '📦 Run Ruche', action: 'run_ruche' },
+      { label: '🧠 Fine-tune', action: 'run_finetune' },
+      { label: '📊 View Stats', action: 'show_stats' },
+      { label: '🗑️ Clear Logs', action: 'clear_logs' },
+      { label: '⚡ Quick Task', action: 'quick_task' },
+    ];
+
+    content.innerHTML = `<div class="controls-grid">${
+      btns.map(b => `<div class="control-btn" data-action="${b.action}">${b.label}</div>`).join('')
+    }</div>`;
+
+    content.querySelectorAll('.control-btn').forEach(el => {
+      el.addEventListener('click', () => this.onControlAction(el.dataset.action));
+    });
+  },
+
+  onControlAction(action) {
+    this.addLog('action', `Quick action: ${action}`);
+    this.sendToAgent(`/do ${action}`);
+  },
+
+  // ─── Panel Tabs ─────────────────────────────────────────────
+  initTabs() {
+    document.querySelectorAll('.panel-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const tabName = tab.dataset.tab;
+        if (tabName === 'tasks') this.renderTasks();
+        else if (tabName === 'plan') this.renderPlan();
+        else if (tabName === 'subagents') this.renderSubagents();
+        else if (tabName === 'controls') this.renderControls();
+      });
+    });
+
+    // Bottom tabs
+    document.querySelectorAll('.bottom-tab[data-view]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  },
+
+  // ─── Focus Mode ────────────────────────────────────────────
+  toggleFocus() {
+    const overlay = document.getElementById('focus-overlay');
+    const btn = document.getElementById('focus-btn');
+    this.state.focusMode = !this.state.focusMode;
+    
+    if (this.state.focusMode) {
+      overlay.classList.add('visible');
+      btn.classList.add('active');
+    } else {
+      overlay.classList.remove('visible');
+      btn.classList.remove('active');
+    }
+  },
+
+  // ─── Scheduled Windows ──────────────────────────────────────
+  addScheduledWindow(id, title, content, actions = []) {
+    const container = document.getElementById('scheduled-windows');
+    const win = document.createElement('div');
+    win.className = 'floating-layer scheduled-window visible';
+    win.id = `scheduled-${id}`;
+    win.style.cssText = `top: ${100 + Math.random() * 200}px; right: ${20 + Math.random() * 100}px;`;
+    
+    win.innerHTML = `
+      <div class="scheduled-header">
+        <div class="scheduled-title">${title}</div>
+        <button class="scheduled-close" data-id="${id}">✕</button>
+      </div>
+      <div class="scheduled-content">${content}</div>
+      ${actions.length ? `<div class="scheduled-actions">${actions.map(a => 
+        `<div class="scheduled-action" data-action="${a.action}">${a.label}</div>`).join('')}</div>` : ''}
+    `;
+
+    win.querySelector('.scheduled-close').addEventListener('click', () => {
+      win.remove();
+      this.state.scheduledWindows = this.state.scheduledWindows.filter(w => w.id !== id);
+    });
+
+    actions.forEach(a => {
+      win.querySelector(`[data-action="${a.action}"]`)?.addEventListener('click', () => {
+        this.onScheduledAction(a.action);
+      });
+    });
+
+    container.appendChild(win);
+    this.state.scheduledWindows.push({ id, title, content });
+  },
+
+  onScheduledAction(action) {
+    this.addLog('action', `Scheduled action: ${action}`);
+    this.sendToAgent(`/do ${action}`);
+  },
+
+  // ─── Activity Popup ────────────────────────────────────────
+  showActivityPopup(title, content) {
+    const popup = document.getElementById('activity-popup');
+    document.getElementById('activity-popup-title').textContent = title;
+    document.getElementById('activity-popup-content').textContent = content;
+    popup.classList.add('visible');
+  },
+
+  // ─── Chat & Agent Communication ─────────────────────────────
+  initChat() {
+    const input = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    const micBtn = document.getElementById('mic-btn');
+
+    const send = () => {
+      const text = input.value.trim();
+      if (!text) return;
+      this.sendToAgent(text);
+      input.value = '';
+    };
+
+    sendBtn.addEventListener('click', send);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+    micBtn.addEventListener('click', () => {
+      if (!this.state.voiceEnabled) {
+        this.toggleVoice();
+      }
+      micBtn.classList.toggle('recording');
+    });
+  },
+
+  sendToAgent(text) {
+    this.addLog('action', `User: ${text}`);
+    document.getElementById('subtitle').textContent = `You: ${text.substring(0, 80)}${text.length > 80 ? '...' : ''}`;
+    document.getElementById('subtitle').classList.remove('agent');
+    this.setAgentStatus('Processing...', 'thinking');
+    this.setOrbState('thinking');
+
+    // Simulate agent response (real implementation would call OpenClaw API)
+    setTimeout(() => {
+      const responses = [
+        { msg: 'I\'m checking the services now...', state: 'thinking' },
+        { msg: 'All 8 ports are operational ✅', state: 'idle' },
+        { msg: 'Running Ruche data collection...', state: 'speaking' },
+        { msg: 'Found 3 new datasets on HuggingFace', state: 'idle' },
+      ];
+      const r = responses[Math.floor(Math.random() * responses.length)];
+      this.addLog('think', r.msg);
+      document.getElementById('subtitle').textContent = `JARVIS: ${r.msg}`;
+      document.getElementById('subtitle').classList.add('agent');
+      this.setAgentStatus(r.msg, r.state);
+      this.setOrbState(r.state);
+      
+      setTimeout(() => {
+        if (r.state !== 'error') this.setOrbState('idle');
+      }, 2000);
+    }, 1500);
+  },
+
+  // ─── API to Agent (OpenClaw integration) ─────────────────────
+  async callOpenClaw(action, params = {}) {
+    // This would integrate with OpenClaw's API
+    // For now, just log
+    this.addLog('action', `OpenClaw API: ${action}`);
+  },
+
+  // ─── Emergency Stop ─────────────────────────────────────────
+  emergencyStop() {
+    this.addLog('error', 'EMERGENCY STOP ACTIVATED');
+    this.setOrbState('error');
+    this.setAgentStatus('STOPPED', '');
+    this.state.voiceEnabled = false;
+    this.state.cameraEnabled = false;
+    this.state.keyboardEnabled = false;
+
+    document.getElementById('voice-btn').classList.remove('active');
+    document.getElementById('camera-btn').classList.remove('active');
+    document.getElementById('keyboard-btn').classList.remove('active');
+    document.getElementById('virtual-keyboard').classList.remove('visible');
+    document.getElementById('drawing-layer').classList.remove('visible');
+
+    this.callOpenClaw('stop');
+  },
+
+  // ─── Event Listeners ────────────────────────────────────────
+  initEvents() {
+    document.getElementById('voice-btn').addEventListener('click', () => this.toggleVoice());
+    document.getElementById('camera-btn').addEventListener('click', () => this.toggleDrawing());
+    document.getElementById('keyboard-btn').addEventListener('click', () => this.toggleKeyboard());
+    document.getElementById('stop-btn').addEventListener('click', () => {
+      if (confirm('Stop all agent operations?')) this.emergencyStop();
+    });
+    document.getElementById('focus-btn').addEventListener('click', () => this.toggleFocus());
+    document.getElementById('focus-overlay').addEventListener('click', () => this.toggleFocus());
+    document.getElementById('vk-close').addEventListener('click', () => this.toggleKeyboard());
+    document.getElementById('drawing-close').addEventListener('click', () => this.toggleDrawing());
+    document.getElementById('activity-popup-close').addEventListener('click', () => {
+      document.getElementById('activity-popup').classList.remove('visible');
+    });
+    document.getElementById('cal-prev').addEventListener('click', () => {
+      if (this.calMonth === 0) { this.calMonth = 11; this.calYear--; }
+      else this.calMonth--;
+      this.renderCalendar();
+    });
+    document.getElementById('cal-next').addEventListener('click', () => {
+      if (this.calMonth === 11) { this.calMonth = 0; this.calYear++; }
+      else this.calMonth++;
+      this.renderCalendar();
+    });
+    document.getElementById('popup-cancel')?.addEventListener('click', () => {
+      document.getElementById('agent-popup').classList.remove('visible');
+      if (this.popupCallback) this.popupCallback('Cancel', null);
+    });
+    document.getElementById('popup-confirm')?.addEventListener('click', () => {
+      const input = document.getElementById('popup-input');
+      document.getElementById('agent-popup').classList.remove('visible');
+      if (this.popupCallback) this.popupCallback('Confirm', input.value);
+    });
+  },
+
+  // ─── Demo Mode ──────────────────────────────────────────────
+  runDemo() {
+    this.addLog('action', 'JARVIS Dashboard initialized');
+    this.addLog('think', 'All systems nominal');
+    this.addLog('file', 'Config loaded: 9 providers');
+    this.addLog('web', 'NEXUS services: 8/8 online');
+    this.addLog('action', 'Ruche v2 ready');
+    this.setAgentStatus('Ready', 'idle');
+
+    // Demo calendar events
+    this.state.calendarEvents = [
+      { date: `${this.calYear}-${this.calMonth}-${new Date().getDate()}`, time: '09:00', title: 'Daily check' },
+      { date: `${this.calYear}-${this.calMonth}-${new Date().getDate()}`, time: '14:00', title: 'Ruche collection' },
+    ];
+    this.renderCalendar();
+
+    // Simulate agent activity
+    setTimeout(() => {
+      this.addLog('think', 'Monitoring service health...');
+      this.setAgentStatus('Checking services...', 'thinking');
+    }, 3000);
+  },
+
+  // ─── Init ───────────────────────────────────────────────────
+  init() {
+    this.initOrb();
+    this.initKeyboard();
+    this.initTabs();
+    this.initChat();
+    this.initEvents();
+    this.renderTasks();
+    this.renderCalendar();
+    this.setOrbState('idle');
+    this.runDemo();
+  }
+};
+
+// Start
+document.addEventListener('DOMContentLoaded', () => JARVIS.init());
+</script>
+</body>
+</html>
