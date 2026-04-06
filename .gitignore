@@ -1,1 +1,4 @@
 logs/autonomous_runner.log
+*.pyc
+.venv/
+__pycache__/
