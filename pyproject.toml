@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "looplib"
+version = "1.0.0"
+description = "Native LLM dataset format — conversation-native, compressed, streamable"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Lévy", email = "soe@lvs0.dev" }]
+keywords = ["llm", "fine-tuning", "dataset", "machine-learning", "nlp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "zstandard>=0.21",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+hf = ["datasets>=2.14", "transformers>=4.35"]
+dev = ["pytest>=7.4", "pytest-cov", "black", "isort", "mypy"]
+
+[project.scripts]
+loop = "looplib.cli:main"
+
+[project.urls]
+Homepage   = "https://github.com/lvs0/looplib"
+Repository = "https://github.com/lvs0/looplib"
+Issues     = "https://github.com/lvs0/looplib/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["looplib*"]
+
+[tool.black]
+line-length    = 100
+target-version = ["py310"]
+
+[tool.isort]
+profile       = "black"
+line_length   = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts   = "-v --tb=short"
