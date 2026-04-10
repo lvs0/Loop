@@ -173,3 +173,4 @@ Issues et PRs bienvenues. La critique technique honnête est préférée à l'en
 Construit par Lévy, 14 ans, France. Sur un ThinkPad X250. Sans demander la permission.
 
 *"Un format de données, c'est une philosophie encodée en binaire."*
+by Hope
