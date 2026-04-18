@@ -74,10 +74,10 @@ for record in reader.stream(min_quality=0.70, split="train"):
     messages = record["messages"]
 
 # Sequence packing pour l'entraînement — la vraie innovation
-for packed in reader.packed_sequences(max_len=2048, tokenizer=tokenizer):
+for packed in reader.packed_sequences(tokenizer, max_seq_len=2048):
     input_ids      = packed["input_ids"]       # [2048] — plein, pas de padding
     labels         = packed["labels"]           # [2048] — -100 sur les prompts
-    attention_mask = packed["attention_mask"]   # [2048]
+    attention_mask = packed["attention_mask"]  # [2048]
     # → GPU utilisé à ~95% au lieu de ~40%
 ```
 

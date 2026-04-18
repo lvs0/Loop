@@ -132,7 +132,7 @@ class LoopReader:
                         continue
                 # Filtrage langue
                 if language is not None:
-                    if record.get("language", language) != language:
+                    if record.get("language", "") != language:
                         continue
                 # Filtrage tags
                 if tags_set is not None:
@@ -234,6 +234,44 @@ class LoopReader:
             yield from self.stream(min_quality=min_quality, split=split)
 
         return Dataset.from_generator(gen)
+
+    def packed_sequences(
+        self,
+        tokenizer,
+        max_seq_len:  int           = 2048,
+        min_quality:  Optional[float] = None,
+        split:        Optional[str]   = None,
+    ):
+        """
+        Stream-packed sequences ready for LLM fine-tuning.
+
+        This is a convenience wrapper around SequencePacker that reads directly
+        from the .loop file and yields packed sequences, without loading all records
+        into RAM.
+
+        Example:
+            reader = LoopReader("coding_fr.loop")
+            for packed in reader.packed_sequences(tokenizer, max_seq_len=2048, min_quality=0.70):
+                input_ids      = packed["input_ids"]       # [2048]
+                labels         = packed["labels"]          # [2048]  -100 on prompts
+                attention_mask = packed["attention_mask"]  # [2048]
+                position_ids   = packed["position_ids"]    # [2048]
+
+        Args:
+            tokenizer:    HuggingFace tokenizer (must have apply_chat_template).
+            max_seq_len:  Maximum sequence length (default 2048).
+            min_quality:  Optional minimum quality filter.
+            split:        Optional split filter ("train", "val", "test").
+
+        Yields:
+            dict with keys: input_ids, labels, attention_mask, position_ids.
+            All lists have exactly max_seq_len elements.
+
+        Note: Requires the ``transformers`` library.
+        """
+        from looplib.packer import SequencePacker
+        packer = SequencePacker(tokenizer, max_seq_len=max_seq_len)
+        yield from packer.pack(self.stream(min_quality=min_quality, split=split))
 
     @property
     def metadata(self) -> Dict[str, Any]:

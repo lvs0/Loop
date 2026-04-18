@@ -229,6 +229,38 @@ def _ascii_bar(value: int, max_value: int, width: int = 30) -> str:
     return "█" * bar_len + "░" * (width - bar_len)
 
 
+def _quality_histogram(quality_buckets: dict, total: int) -> str:
+    """Génère un histogramme ASCII vertical de la distribution de qualité."""
+    if not quality_buckets or total == 0:
+        return "  (aucune donnée)"
+
+    lines   = []
+    buckets = list(quality_buckets.items())
+    max_val = max(v for _, v in buckets)
+
+    lines.append("")
+    lines.append("  Distribution qualité — histogramme ASCII")
+    lines.append("  ──────────────────────────────────────────")
+
+    rows  = 16
+    scale = max_val / rows if max_val > 0 else 1
+
+    for row in range(rows, 0, -1):
+        threshold = row * scale
+        line = "  "
+        for bucket, count in buckets:
+            bar_char = "█" if count >= threshold else " "
+            line += f" {bar_char}"
+        lines.append(line)
+
+    label_line   = "  └" + "┴─" * len(buckets)
+    bucket_labels = "  " + " ".join(f"{b.split('-')[0]}" for b, _ in buckets)
+    lines.append(label_line)
+    lines.append(bucket_labels)
+
+    return "\n".join(lines)
+
+
 def cmd_stats(args) -> None:
     """Affiche des statistiques détaillées."""
     from looplib.reader import LoopReader
@@ -278,6 +310,8 @@ def cmd_stats(args) -> None:
     if max_bucket == 0:
         print("    (aucune donnée de qualité disponible)")
     else:
+        if args.plot:
+            print(_quality_histogram(quality_buckets, total))
         for bucket, count in quality_buckets.items():
             bar = _ascii_bar(count, max_bucket)
             pct = count / total * 100 if total else 0
@@ -376,6 +410,54 @@ def cmd_count(args) -> None:
     print()
 
 
+def cmd_merge(args) -> None:
+    """Fusionne plusieurs fichiers .loop en un seul."""
+    from looplib.reader import LoopReader
+    from looplib.writer import LoopWriter
+    from looplib.validator import ValidationError
+
+    input_paths = [Path(p) for p in args.files]
+    output_path = Path(args.output)
+
+    for p in input_paths:
+        if not p.exists():
+            print(f"Fichier introuvable : {p}")
+            sys.exit(1)
+
+    # Collect metadata from first file as base
+    first_reader = LoopReader(input_paths[0])
+    merged_meta  = dict(first_reader.metadata)
+    merged_meta["name"]        = args.name or (merged_meta.get("name", "merged") + "_merged")
+    merged_meta["description"]  = f"Fusion de {len(input_paths)} fichiers .loop"
+    merged_meta["source"]      = ", ".join(str(p) for p in input_paths)
+
+    writer   = LoopWriter(output_path, metadata=merged_meta)
+    total    = 0
+    skipped  = 0
+
+    print(f"Fusion de {len(input_paths)} fichiers .loop → {output_path}")
+
+    for p in input_paths:
+        reader = LoopReader(p)
+        file_total = 0
+        for record in reader.stream():
+            try:
+                writer.add(record)
+                file_total += 1
+            except ValidationError:
+                skipped += 1
+        total += file_total
+        print(f"  + {file_total:,} records depuis {p.name}")
+
+    if total == 0:
+        print("Aucun record à fusionner.")
+        sys.exit(1)
+
+    size = writer.save()
+    print(f"\n  ✓ {total:,} records fusionnés ({skipped} ignorés)")
+    print(f"  ✓ Fichier  : {output_path} ({size / 1024:.1f} KB)\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="loop",
@@ -417,6 +499,12 @@ def main() -> None:
     p_count.add_argument("--min-quality", "-q", type=float, default=None)
     p_count.add_argument("--split",       "-s", choices=["train", "val", "test"])
 
+    # loop merge
+    p_merge = subparsers.add_parser("merge", help="Fusionner plusieurs fichiers .loop")
+    p_merge.add_argument("files",  nargs="+", help="Fichiers .loop à fusionner")
+    p_merge.add_argument("--output", "-o", required=True, help="Fichier de sortie (.loop)")
+    p_merge.add_argument("--name",         help="Nom du dataset fusionné")
+
     args = parser.parse_args()
 
     commands = {
@@ -426,6 +514,7 @@ def main() -> None:
         "stats":    cmd_stats,
         "filter":   cmd_filter,
         "count":    cmd_count,
+        "merge":    cmd_merge,
     }
     commands[args.command](args)
 

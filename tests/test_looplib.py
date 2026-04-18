@@ -250,6 +250,20 @@ class TestLoopReader:
         assert all(r.get("split") == "val" for r in records)
         assert len(records) == 10
 
+    def test_stream_language_filter(self, tmp_path):
+        """Language filter: records without a language field must NOT pass the filter."""
+        path = tmp_path / "lang.loop"
+        w    = LoopWriter(path, metadata={"name": "lang_test", "category": "test", "language": "fr"})
+        w.add({"messages": [{"role": "user", "content": "Q"}, {"role": "assistant", "content": "A"}], "language": "fr", "split": "train"})
+        w.add({"messages": [{"role": "user", "content": "Q"}, {"role": "assistant", "content": "A"}], "language": "en", "split": "train"})
+        w.add({"messages": [{"role": "user", "content": "Q"}, {"role": "assistant", "content": "A"}]})  # no language
+        w.save()
+
+        reader = LoopReader(path)
+        assert len(list(reader.stream(language="fr"))) == 1
+        assert len(list(reader.stream(language="en"))) == 1
+        assert len(list(reader.stream())) == 3
+
     def test_read_block_direct(self, tmp_loop):
         reader  = LoopReader(tmp_loop)
         block_0 = reader.read_block(0)
