@@ -247,7 +247,7 @@ def cmd_stats(args) -> None:
     lang_count   = {}
     split_count  = {"train": 0, "val": 0, "test": 0}
 
-    for record in reader.stream():
+    for record in reader.stream(min_quality=args.min_quality, split=args.split, language=args.language):
         q = record.get("quality")
         if q is not None:
             bucket_idx = min(int(float(q) * 10), 9)

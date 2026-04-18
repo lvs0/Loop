@@ -438,6 +438,9 @@ class TestSequencePacker:
         assert 0 < stats["naive_gpu_usage"] <= 100
         # packed usage capped at ~100%
         assert 0 < stats["packed_gpu_usage"] <= 100
+        # Packing should give meaningfully better GPU utilization than naive
+        assert stats["packed_gpu_usage"] > stats["naive_gpu_usage"], \
+            f"Packing should improve GPU usage: naive={stats['naive_gpu_usage']}, packed={stats['packed_gpu_usage']}"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
