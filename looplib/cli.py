@@ -362,6 +362,20 @@ def cmd_filter(args) -> None:
     print(f"✓ {count:,} records → {output} ({size / 1024:.1f} KB)")
 
 
+def cmd_count(args) -> None:
+    """Compte les records correspondant aux filtres."""
+    from looplib.reader import LoopReader
+
+    reader = LoopReader(args.file)
+    count  = reader.count(min_quality=args.min_quality, split=args.split)
+    total  = reader._header["n_records"]
+
+    print(f"{count:,} records", end="")
+    if args.min_quality is not None or args.split is not None:
+        print(f" (sur {total:,} total)", end="")
+    print()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="loop",
@@ -397,6 +411,12 @@ def main() -> None:
     p_filt.add_argument("--min-quality", "-q", type=float, default=None)
     p_filt.add_argument("--split",       "-s", choices=["train", "val", "test"])
 
+    # loop count
+    p_count = subparsers.add_parser("count", help="Compter les records (avec filtres optionnels)")
+    p_count.add_argument("file")
+    p_count.add_argument("--min-quality", "-q", type=float, default=None)
+    p_count.add_argument("--split",       "-s", choices=["train", "val", "test"])
+
     args = parser.parse_args()
 
     commands = {
@@ -405,6 +425,7 @@ def main() -> None:
         "convert":  cmd_convert,
         "stats":    cmd_stats,
         "filter":   cmd_filter,
+        "count":    cmd_count,
     }
     commands[args.command](args)
 

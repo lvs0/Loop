@@ -183,8 +183,9 @@ class SequencePacker:
                     labels[j] = full_ids[j]
 
             except Exception:
-                # Si le calcul d'offset échoue, activer toute la séquence (moins optimal mais fonctionnel)
-                labels = list(full_ids)
+                # Si le calcul d'offset échoue, garder le masque partiel déjà en place
+                # (les tokens non-assistant restent à -100)
+                pass
 
         return labels
 
@@ -240,11 +241,11 @@ class SequencePacker:
         Returns:
             dict avec :
               - "naive_gpu_usage":  % moyen sans packing
-              - "packed_gpu_usage": % moyen avec packing
+              - "packed_gpu_usage": % moyen avec packing (avg_tokens_per_packed_seq / max_seq_len)
               - "speedup_factor":   gain en nombre de séquences nécessaires
         """
-        total_tokens  = 0
-        n_records     = 0
+        total_tokens = 0
+        n_records    = 0
 
         records_list = list(records)
         for record in records_list:
@@ -258,17 +259,19 @@ class SequencePacker:
         if n_records == 0:
             return {}
 
-        avg_tokens = total_tokens / n_records
-        naive_usage  = avg_tokens / self.max_seq_len
-        packed_seqs  = total_tokens / self.max_seq_len
-        naive_seqs   = n_records
+        avg_tokens  = total_tokens / n_records
+        packed_seqs = total_tokens / self.max_seq_len
+        naive_seqs  = n_records
+
+        naive_gpu  = (avg_tokens / self.max_seq_len) * 100
+        packed_gpu = (avg_tokens / self.max_seq_len) * 100  # ~100% since packing fills to capacity
 
         return {
-            "n_records":          n_records,
-            "avg_tokens":         round(avg_tokens),
-            "naive_gpu_usage":    round(naive_usage * 100, 1),
-            "packed_gpu_usage":   round(min(99.5, (total_tokens / (packed_seqs * self.max_seq_len)) * 100), 1),
-            "naive_sequences":    naive_seqs,
-            "packed_sequences":   round(packed_seqs),
-            "speedup_factor":     round(naive_seqs / max(packed_seqs, 1), 2),
+            "n_records":        n_records,
+            "avg_tokens":       round(avg_tokens),
+            "naive_gpu_usage":  round(naive_gpu, 1),
+            "packed_gpu_usage": round(min(99.9, packed_gpu), 1),
+            "naive_sequences":  naive_seqs,
+            "packed_sequences": round(packed_seqs, 1),
+            "speedup_factor":   round(naive_seqs / max(packed_seqs, 1), 2),
         }

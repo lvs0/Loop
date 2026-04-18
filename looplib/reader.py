@@ -230,12 +230,10 @@ class LoopReader:
                 "Installer HuggingFace datasets : pip install datasets"
             )
 
-        gen     = lambda: self.stream(min_quality=min_quality, split=split)
+        def gen():
+            yield from self.stream(min_quality=min_quality, split=split)
 
-        return Dataset.from_generator(
-            gen,
-            gen_kwargs={"generator": gen},
-        )
+        return Dataset.from_generator(gen)
 
     @property
     def metadata(self) -> Dict[str, Any]:
