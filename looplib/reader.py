@@ -205,9 +205,21 @@ class LoopReader:
         self,
         min_quality: Optional[float] = None,
         split:       Optional[str]   = None,
+        batch_size:  int            = 1000,
     ):
         """
-        Exporte vers un datasets.Dataset HuggingFace.
+        Exporte vers un datasets.Dataset HuggingFace via streaming.
+
+        Utilise un générateur plutôt que de charger tous les records en RAM,
+        ce qui permet d'exporter des datasets volumineux sans épuiser la mémoire.
+
+        Args:
+            min_quality: Score qualité minimum pour filtrer.
+            split:       Split à exporter ("train", "val", "test").
+            batch_size:  Nombre de records par lot (pour info seulement).
+
+        Returns:
+            datasets.Dataset configuré pour un entraînement LLM.
 
         Nécessite : pip install datasets
         """
@@ -218,8 +230,14 @@ class LoopReader:
                 "Installer HuggingFace datasets : pip install datasets"
             )
 
-        records = self.to_list(min_quality=min_quality, split=split)
-        return Dataset.from_list(records)
+        meta    = self.metadata
+        gen     = lambda: self.stream(min_quality=min_quality, split=split)
+
+        return Dataset.from_generator(
+            gen,
+            features=None,
+            gen_kwargs={},
+        )
 
     @property
     def metadata(self) -> Dict[str, Any]:

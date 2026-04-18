@@ -301,6 +301,20 @@ class TestLoopReader:
         with pytest.raises(FileNotFoundError):
             LoopReader(tmp_path / "nonexistent.loop")
 
+    def test_to_huggingface_uses_generator(self, tmp_loop):
+        """to_huggingface() doit utiliser from_generator (streaming, pas to_list)."""
+        pytest.importorskip("datasets")
+        from datasets import Dataset
+        from looplib.reader import LoopReader
+
+        reader = LoopReader(tmp_loop)
+        ds = reader.to_huggingface()
+
+        # Vérifie que c'est un Dataset HuggingFace
+        assert isinstance(ds, Dataset)
+        # Vérifie que les records sont bien présents
+        assert len(ds) == len(SAMPLE_RECORDS)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tests intégrité

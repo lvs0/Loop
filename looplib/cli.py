@@ -221,6 +221,14 @@ def _normalize_record(record: dict) -> dict:
     raise ValueError(f"Format non reconnu, champs disponibles : {list(record.keys())}")
 
 
+def _ascii_bar(value: int, max_value: int, width: int = 30) -> str:
+    """Génère une barre ASCII proportionnelle."""
+    if max_value == 0:
+        return " " * width
+    bar_len = int(value * width / max_value)
+    return "█" * bar_len + "░" * (width - bar_len)
+
+
 def cmd_stats(args) -> None:
     """Affiche des statistiques détaillées."""
     from looplib.reader import LoopReader
@@ -234,6 +242,10 @@ def cmd_stats(args) -> None:
     # Distribution des qualités
     quality_buckets = {f"{i/10:.1f}-{(i+1)/10:.1f}": 0 for i in range(10)}
     total = 0
+    tokens_total = 0
+    tags_count   = {}
+    lang_count   = {}
+    split_count  = {"train": 0, "val": 0, "test": 0}
 
     for record in reader.stream():
         q = record.get("quality")
@@ -241,12 +253,85 @@ def cmd_stats(args) -> None:
             bucket_idx = min(int(float(q) * 10), 9)
             key = list(quality_buckets.keys())[bucket_idx]
             quality_buckets[key] += 1
+
+        tokens = record.get("tokens")
+        if tokens:
+            tokens_total += tokens
+
+        tags = record.get("tags", [])
+        for tag in tags:
+            tags_count[tag] = tags_count.get(tag, 0) + 1
+
+        lang = record.get("language")
+        if lang:
+            lang_count[lang] = lang_count.get(lang, 0) + 1
+
+        split = record.get("split", "train")
+        if split in split_count:
+            split_count[split] += 1
+
         total += 1
 
+    # ── Qualité ──────────────────────────────────────────────────────────────
+    max_bucket = max(quality_buckets.values(), default=0)
     print(f"\n  Distribution qualité ({total:,} records) :")
-    for bucket, count in quality_buckets.items():
-        bar = "█" * (count * 30 // max(quality_buckets.values(), default=1))
-        print(f"    {bucket} │ {bar} {count:,}")
+    if max_bucket == 0:
+        print("    (aucune donnée de qualité disponible)")
+    else:
+        for bucket, count in quality_buckets.items():
+            bar = _ascii_bar(count, max_bucket)
+            pct = count / total * 100 if total else 0
+            print(f"    {bucket} │ {bar} │ {count:,} ({pct:.1f}%)")
+
+    # ── Tokens ─────────────────────────────────────────────────────────────────
+    if tokens_total > 0:
+        avg_tokens = tokens_total / total
+        print(f"\n  Tokens :")
+        print(f"    Total     : {tokens_total:,}")
+        print(f"    Moyenne   : {avg_tokens:.0f} / record")
+
+    # ── Langues ───────────────────────────────────────────────────────────────
+    if lang_count:
+        print(f"\n  Langues ({len(lang_count)} categories) :")
+        sorted_langs = sorted(lang_count.items(), key=lambda x: -x[1])[:8]
+        max_lang = max(lang_count.values(), default=1)
+        for lang, count in sorted_langs:
+            bar = _ascii_bar(count, max_lang, 20)
+            pct = count / total * 100
+            print(f"    {lang:>6} │ {bar} {pct:5.1f}%")
+
+    # ── Tags ──────────────────────────────────────────────────────────────────
+    if tags_count:
+        print(f"\n  Top tags ({len(tags_count)} total) :")
+        sorted_tags = sorted(tags_count.items(), key=lambda x: -x[1])[:10]
+        max_tag = max(tags_count.values(), default=1)
+        for tag, count in sorted_tags:
+            bar = _ascii_bar(count, max_tag, 20)
+            pct = count / total * 100
+            print(f"    {tag:<15} │ {bar} {pct:5.1f}%")
+
+    # ── Splits ────────────────────────────────────────────────────────────────
+    if any(v > 0 for v in split_count.values()):
+        print(f"\n  Splits :")
+        max_split = max(split_count.values(), default=1)
+        for split, count in split_count.items():
+            bar = _ascii_bar(count, max_split, 20)
+            pct = count / total * 100 if total else 0
+            print(f"    {split:<6} │ {bar} {count:,} ({pct:.1f}%)")
+
+    # ── Efficiency estimate ──────────────────────────────────────────────────
+    if tokens_total > 0 and info.get("block_size"):
+        max_len = 2048  # assumption
+        naive_seqs  = total
+        packed_seqs = tokens_total / max_len
+        if packed_seqs > 0:
+            speedup = naive_seqs / packed_seqs
+            naive_util   = (tokens_total / naive_seqs) / max_len * 100
+            packed_util  = min(99.5, (tokens_total / packed_seqs) / max_len * 100)
+            print(f"\n  Efficiency estimate (max_seq_len={max_len}) :")
+            print(f"    Naive  GPU util : ~{naive_util:.1f}%  ({naive_seqs:,} sequences)")
+            print(f"    Packed GPU util : ~{packed_util:.1f}%  ({packed_seqs:.0f} sequences)")
+            print(f"    Speedup         : {speedup:.1f}x fewer sequences")
 
     print()
 
@@ -303,6 +388,7 @@ def main() -> None:
     # loop stats
     p_stats = subparsers.add_parser("stats", help="Statistiques détaillées")
     p_stats.add_argument("file")
+    p_stats.add_argument("--plot", "-p", action="store_true", help="Afficher un histogramme ASCII de la distribution de qualité")
 
     # loop filter
     p_filt = subparsers.add_parser("filter", help="Filtrer et exporter")
