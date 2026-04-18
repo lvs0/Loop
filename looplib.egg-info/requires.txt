@@ -1,0 +1,13 @@
+zstandard>=0.21
+numpy>=1.24
+
+[dev]
+pytest>=7.4
+pytest-cov
+black
+isort
+mypy
+
+[hf]
+datasets>=2.14
+transformers>=4.35

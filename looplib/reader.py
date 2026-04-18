@@ -114,11 +114,8 @@ class LoopReader:
         for block_idx in range(self._header["n_blocks"]):
             index_entry = self._index[block_idx]
 
-            # Filtre rapide au niveau bloc : si le split ne correspond pas, skip
-            if target_split_id is not None:
-                block_split = index_entry["split_id"]
-                if block_split != SPLIT_ALL and block_split != target_split_id:
-                    continue
+            # Note: block-level split filtering is skipped because a block's dominant split
+            # may differ from individual record splits. Record-level filter handles this correctly.
 
             for record in self._read_block_raw(block_idx):
                 # Filtrage qualité
