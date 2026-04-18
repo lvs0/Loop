@@ -1,0 +1,30 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Distribution / build
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Loop data files (user generated)
+*.loop
+*.looppatch
