@@ -66,7 +66,7 @@ class TestLoopValidator:
         self.v = LoopValidator()
 
     def test_valid_record(self):
-        self.v.validate(SAMPLE_RECORD)  # Ne doit pas lever d'exception
+        self.v.validate(SAMPLE_RECORD)
 
     def test_missing_messages(self):
         with pytest.raises(ValidationError, match="messages"):
@@ -119,7 +119,6 @@ class TestLoopValidator:
             self.v.validate({**SAMPLE_RECORD, "split": "unknown"})
 
     def test_valid_all_roles(self):
-        """Tous les roles valides doivent passer si user+assistant présents."""
         record = {
             "messages": [
                 {"role": "system",    "content": "Système."},
@@ -128,7 +127,7 @@ class TestLoopValidator:
                 {"role": "tool",      "content": "Résultat outil."},
             ]
         }
-        self.v.validate(record)  # Ne doit pas lever
+        self.v.validate(record)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -176,7 +175,7 @@ class TestLoopWriter:
         path = tmp_path / "chain.loop"
         w = LoopWriter(path)
         result = w.add(SAMPLE_RECORD)
-        assert result is w  # Doit retourner self
+        assert result is w
 
     def test_add_many(self, tmp_path):
         path = tmp_path / "many.loop"
@@ -186,10 +185,9 @@ class TestLoopWriter:
         assert path.exists()
 
     def test_block_flush(self, tmp_path):
-        """Vérifie que les blocs sont créés correctement avec block_size petit."""
         path   = tmp_path / "blocks.loop"
         w      = LoopWriter(path, block_size=5)
-        n      = 23  # Doit créer ceil(23/5) = 5 blocs
+        n      = 23
         for i in range(n):
             r = {
                 "messages": [
@@ -222,7 +220,6 @@ class TestLoopWriter:
 class TestLoopReader:
 
     def test_round_trip(self, tmp_loop):
-        """Écrire puis relire doit donner les mêmes records."""
         reader  = LoopReader(tmp_loop)
         records = reader.to_list()
         assert len(records) == len(SAMPLE_RECORDS)
@@ -251,7 +248,7 @@ class TestLoopReader:
         reader  = LoopReader(tmp_loop)
         records = list(reader.stream(split="val"))
         assert all(r.get("split") == "val" for r in records)
-        assert len(records) == 10  # 1 sur 5 → indices 0,5,10,15,20,25,30,35,40,45
+        assert len(records) == 10
 
     def test_read_block_direct(self, tmp_loop):
         reader  = LoopReader(tmp_loop)
@@ -283,13 +280,11 @@ class TestLoopReader:
         assert count == len(SAMPLE_RECORDS)
         assert output_path.exists()
 
-        # Vérifier que le JSONL est valide
         with open(output_path) as f:
             lines = [json.loads(l) for l in f if l.strip()]
         assert len(lines) == len(SAMPLE_RECORDS)
 
     def test_corrupt_magic_raises(self, tmp_path):
-        """Un fichier avec magic invalide doit lever LoopParseError."""
         from looplib.reader import LoopParseError
         path = tmp_path / "corrupt.loop"
         path.write_bytes(b"FAKE" + b"\x00" * 100)
@@ -302,7 +297,6 @@ class TestLoopReader:
             LoopReader(tmp_path / "nonexistent.loop")
 
     def test_to_huggingface_uses_generator(self, tmp_loop):
-        """to_huggingface() doit utiliser from_generator (streaming, pas to_list)."""
         pytest.importorskip("datasets")
         from datasets import Dataset
         from looplib.reader import LoopReader
@@ -310,10 +304,140 @@ class TestLoopReader:
         reader = LoopReader(tmp_loop)
         ds = reader.to_huggingface()
 
-        # Vérifie que c'est un Dataset HuggingFace
         assert isinstance(ds, Dataset)
-        # Vérifie que les records sont bien présents
         assert len(ds) == len(SAMPLE_RECORDS)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests SequencePacker
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestSequencePacker:
+
+    @pytest.fixture
+    def fake_tokenizer(self):
+        """Un tokenizer minimal qui produit ~3-5 tokens par mot (avec special tokens)."""
+        class FakeTokenizer:
+            def __init__(self):
+                self.eos_token_id = 2
+                self.pad_token_id = 0
+
+            def encode(self, text, add_special_tokens=True):
+                words = text.strip().split() or [""]
+                # Chaque "mot" dans le texte devient 1 token
+                ids = [abs(hash(w)) % 200 for w in text.split()] or [abs(hash(text)) % 200]
+                if add_special_tokens:
+                    ids = [1] + ids + [2]
+                return ids
+
+            def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False):
+                parts = []
+                for m in messages:
+                    parts.append(f"<|{m['role']}|>{m['content']}")
+                text = "".join(parts)
+                if add_generation_prompt:
+                    text += "<|assistant|>"
+                return text
+
+        return FakeTokenizer()
+
+    def test_packer_produces_correct_seq_len(self, fake_tokenizer):
+        from looplib.packer import SequencePacker
+        # With max_seq_len=128 and short Q0/A0 messages (~5-8 tokens), packing should work
+        packer = SequencePacker(fake_tokenizer, max_seq_len=128)
+        records = [
+            {"messages": [{"role": "user", "content": f"Q{i}"}, {"role": "assistant", "content": f"A{i}"}]}
+            for i in range(20)
+        ]
+        seqs = list(packer.pack(iter(records)))
+        assert len(seqs) > 0, "Packer should produce sequences"
+        for seq in seqs:
+            assert len(seq["input_ids"]) == 128
+            assert len(seq["labels"]) == 128
+            assert len(seq["attention_mask"]) == 128
+            assert len(seq["position_ids"]) == 128
+
+    def test_packer_eos_between_conversations(self, fake_tokenizer):
+        from looplib.packer import SequencePacker
+        packer = SequencePacker(fake_tokenizer, max_seq_len=128, add_eos_between=True)
+        records = [
+            {"messages": [{"role": "user", "content": "Short question"}, {"role": "assistant", "content": "Short answer"}]}
+        ]
+        seqs = list(packer.pack(iter(records)))
+        assert len(seqs) == 1, "Should produce exactly one packed sequence"
+        seq = seqs[0]
+        assert seq["input_ids"].count(2) >= 1, "EOS token (2) should appear"
+
+    def test_packer_no_eos_between(self, fake_tokenizer):
+        """With add_eos_between=False, no extra EOS separator is added between conversations.
+        Each conversation still ends with its own EOS token."""
+        from looplib.packer import SequencePacker
+        packer = SequencePacker(fake_tokenizer, max_seq_len=128, add_eos_between=False)
+        # 3 short conversations that can all fit in one packed sequence
+        records = [
+            {"messages": [{"role": "user", "content": f"Q{i}"}, {"role": "assistant", "content": f"A{i}"}]}
+            for i in range(3)
+        ]
+        seqs = list(packer.pack(iter(records)))
+        assert len(seqs) > 0
+        seq = seqs[0]
+        content_ids = [x for x in seq["input_ids"] if x != 0]
+        # With add_eos_between=False, only conversation-final EOS tokens appear
+        # No extra separator EOS is inserted between conversations
+        eos_positions = [i for i, x in enumerate(content_ids) if x == 2]
+        assert len(eos_positions) == 3, f"Expected 3 EOS (one per conv), got {len(eos_positions)}"
+
+    def test_packer_ignores_too_long_conversation(self, fake_tokenizer):
+        from looplib.packer import SequencePacker
+        packer = SequencePacker(fake_tokenizer, max_seq_len=8, add_eos_between=False)
+        records = [
+            {"messages": [{"role": "user", "content": "word " * 20}, {"role": "assistant", "content": "answer"}]}
+        ]
+        seqs = list(packer.pack(iter(records)))
+        assert len(seqs) == 0, "Too-long conversation should be ignored"
+
+    def test_packer_labels_mask_non_assistant(self, fake_tokenizer):
+        from looplib.packer import SequencePacker
+        packer = SequencePacker(fake_tokenizer, max_seq_len=128, label_ignore_id=-100)
+        records = [
+            {"messages": [
+                {"role": "system", "content": "Be helpful"},
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi there"},
+            ]}
+        ]
+        seqs = list(packer.pack(iter(records)))
+        assert len(seqs) > 0
+        labels = seqs[0]["labels"]
+        assert -100 in labels, "Non-assistant tokens should be masked"
+
+    def test_packer_position_ids_reset_per_conversation(self, fake_tokenizer):
+        from looplib.packer import SequencePacker
+        packer = SequencePacker(fake_tokenizer, max_seq_len=128, add_eos_between=True)
+        records = [
+            {"messages": [{"role": "user", "content": f"Q{i}"}, {"role": "assistant", "content": f"A{i}"}]}
+            for i in range(3)
+        ]
+        seqs = list(packer.pack(iter(records)))
+        assert len(seqs) > 0
+        pos_ids = seqs[0]["position_ids"]
+        assert len(set(pos_ids)) > 1, "Position IDs should have multiple values"
+
+    def test_packer_efficiency(self, fake_tokenizer):
+        from looplib.packer import SequencePacker
+        packer = SequencePacker(fake_tokenizer, max_seq_len=128)
+        records = [
+            {"messages": [{"role": "user", "content": f"Q{i}"}, {"role": "assistant", "content": f"A{i}"}]}
+            for i in range(10)
+        ]
+        stats = packer.efficiency(iter(records))
+        assert "naive_gpu_usage" in stats
+        assert "packed_gpu_usage" in stats
+        assert "speedup_factor" in stats
+        # naive usage should be a valid percentage
+        assert 0 < stats["naive_gpu_usage"] <= 100
+        # packed usage capped at ~100%
+        assert 0 < stats["packed_gpu_usage"] <= 100
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -323,7 +447,6 @@ class TestLoopReader:
 class TestIntegrity:
 
     def test_messages_preserved(self, tmp_path):
-        """Les messages doivent être identiques après écriture/lecture."""
         path = tmp_path / "integrity.loop"
         original = {
             "messages": [
@@ -350,7 +473,6 @@ class TestIntegrity:
         assert result["quality"]                == 0.95
 
     def test_large_dataset(self, tmp_path):
-        """Teste avec 1000 records pour vérifier la robustesse."""
         path = tmp_path / "large.loop"
         n    = 1000
 
