@@ -268,6 +268,8 @@ def cmd_stats(args) -> None:
     reader = LoopReader(args.file)
     info   = reader.info()
 
+    max_len = getattr(args, "max_len", 2048)
+
     print(f"\nStatistiques : {args.file}")
     print(f"{'─' * 40}")
 
@@ -355,7 +357,6 @@ def cmd_stats(args) -> None:
 
     # ── Efficiency estimate ──────────────────────────────────────────────────
     if tokens_total > 0 and info.get("block_size"):
-        max_len = 2048  # assumption
         naive_seqs  = total
         packed_seqs = tokens_total / max_len
         if packed_seqs > 0:
@@ -366,6 +367,84 @@ def cmd_stats(args) -> None:
             print(f"    Naive  GPU util : ~{naive_util:.1f}%  ({naive_seqs:,} sequences)")
             print(f"    Packed GPU util : ~{packed_util:.1f}%  ({packed_seqs:.0f} sequences)")
             print(f"    Speedup         : {speedup:.1f}x fewer sequences")
+
+    print()
+
+
+def cmd_pack(args) -> None:
+    """
+    Pack records into training sequences and display efficiency stats.
+
+    Requires a HuggingFace tokenizer name (e.g. meta-llama/Llama-3.2-1B, gpt2).
+    Uses SequencePacker to pack multiple short conversations into full GPU sequences.
+    """
+    from looplib.reader import LoopReader
+    from looplib.packer import SequencePacker
+    import transformers
+
+    reader = LoopReader(args.file)
+
+    # Load tokenizer
+    print(f"\nChargement du tokenizer : {args.tokenizer}")
+    try:
+        tok = transformers.AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
+    except Exception as e:
+        print(f"Erreur de chargement du tokenizer : {e}")
+        sys.exit(1)
+
+    if not hasattr(tok, "apply_chat_template"):
+        print(f"Attention : le tokenizer n'a pas de apply_chat_template — packing en mode texte brut.")
+
+    max_len     = args.max_seq_len
+    min_quality = getattr(args, "min_quality", None)
+    split       = getattr(args, "split", None)
+
+    # Efficiency estimate via SequencePacker
+    print("\nAnalyse de l'efficacité du packing...")
+    packer = SequencePacker(tok, max_seq_len=max_len)
+
+    try:
+        eff = packer.efficiency(reader.stream(min_quality=min_quality, split=split))
+    except Exception as e:
+        print(f"Erreur lors de l'analyse : {e}")
+        sys.exit(1)
+
+    if not eff:
+        print("Aucun record à analyser.")
+        sys.exit(0)
+
+    print(f"\n{'─' * 50}")
+    print(f"  Efficiency — {args.file}")
+    print(f"  Tokenizer : {args.tokenizer}")
+    print(f"  max_seq_len : {max_len}")
+    print(f"{'─' * 50}")
+    print(f"  Records analysés  : {eff['n_records']:,}")
+    print(f"  Tokens moyen/rec  : {eff['avg_tokens']:,}")
+    print(f"  GPU util (naive)   : {eff['naive_gpu_usage']:.1f}%   — 1 convo = 1 seq")
+    print(f"  GPU util (packed)  : {eff['packed_gpu_usage']:.1f}%   — multi-convo / seq")
+    print(f"  Sequences (naive)  : {eff['naive_sequences']:,}")
+    print(f"  Sequences (packed) : {eff['packed_sequences']:.0f}")
+    print(f"  Speedup            : {eff['speedup_factor']:.1f}x fewer sequences")
+    print(f"{'─' * 50}")
+
+    if args.output:
+        count = 0
+        print(f"\nExport vers {args.output}...")
+        with open(args.output, "w") as f:
+            for packed in reader.packed_sequences(tok, max_seq_len=max_len,
+                                                   min_quality=min_quality, split=split):
+                f.write(json.dumps({
+                    "input_ids":      packed["input_ids"],
+                    "labels":         packed["labels"],
+                    "attention_mask": packed["attention_mask"],
+                    "position_ids":  packed["position_ids"],
+                }) + "\n")
+                count += 1
+                if args.limit and count >= args.limit:
+                    break
+        print(f"  ✓ {count:,} séquences exportées")
+    else:
+        print(f"\n  (utilisez --output pour exporter les séquences)")
 
     print()
 
@@ -485,6 +564,17 @@ def main() -> None:
     p_stats = subparsers.add_parser("stats", help="Statistiques détaillées")
     p_stats.add_argument("file")
     p_stats.add_argument("--plot", "-p", action="store_true", help="Afficher un histogramme ASCII de la distribution de qualité")
+    p_stats.add_argument("--max-len", "-m", type=int, default=2048, help="Longueur max de séquence pour l'estimation d'efficacité (défaut: 2048)")
+
+    # loop pack
+    p_pack = subparsers.add_parser("pack", help="Pack records en séquences + stats d'efficacité")
+    p_pack.add_argument("file",                       help="Fichier .loop source")
+    p_pack.add_argument("--tokenizer", "-t", required=True, help="Nom du tokenizer HuggingFace (ex: gpt2, meta-llama/Llama-3.2-1B)")
+    p_pack.add_argument("--max-seq-len", "-l", type=int, default=2048, help="Longueur max de séquence (défaut: 2048)")
+    p_pack.add_argument("--min-quality", "-q", type=float, default=None, help="Score qualité minimum")
+    p_pack.add_argument("--split", "-s", choices=["train", "val", "test"], help="Filtrer par split")
+    p_pack.add_argument("--output", "-o", help="Exporter les séquences vers un fichier JSONL")
+    p_pack.add_argument("--limit", type=int, default=None, help="Nombre max de séquences à exporter")
 
     # loop filter
     p_filt = subparsers.add_parser("filter", help="Filtrer et exporter")
@@ -515,6 +605,7 @@ def main() -> None:
         "filter":   cmd_filter,
         "count":    cmd_count,
         "merge":    cmd_merge,
+        "pack":     cmd_pack,
     }
     commands[args.command](args)
 
