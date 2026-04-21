@@ -28,6 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 hf = ["datasets>=2.14", "transformers>=4.35"]
 dev = ["pytest>=7.4", "pytest-cov", "black", "isort", "mypy"]
+cli = ["rich>=13.0"]
 
 [project.scripts]
 loop = "looplib.cli:main"

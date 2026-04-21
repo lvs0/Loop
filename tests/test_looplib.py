@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from looplib import LoopWriter, LoopReader, LoopValidator, ValidationError
+from looplib import LoopWriter, StreamingLoopWriter, LoopReader, LoopValidator, ValidationError
 from looplib.constants import MAGIC_HEADER, MAGIC_FOOTER, HEADER_SIZE, FOOTER_SIZE
 
 
@@ -460,6 +460,87 @@ class TestSequencePacker:
 # ──────────────────────────────────────────────────────────────────────────────
 # Tests intégrité
 # ──────────────────────────────────────────────────────────────────────────────
+
+class TestStreamingLoopWriter:
+
+    def test_streaming_creates_file(self, tmp_path):
+        path = tmp_path / "stream.loop"
+        w = StreamingLoopWriter(path)
+        w.add(SAMPLE_RECORD)
+        w.finalize()
+        assert path.exists()
+        assert path.stat().st_size > 0
+
+    def test_streaming_round_trip(self, tmp_path):
+        path = tmp_path / "stream.loop"
+        writer = StreamingLoopWriter(path, metadata={"name": "stream_test", "category": "test"})
+        for r in SAMPLE_RECORDS[:20]:
+            writer.add(r)
+        writer.finalize()
+
+        reader = LoopReader(path)
+        records = reader.to_list()
+        assert len(records) == 20
+
+    def test_streaming_large_dataset(self, tmp_path):
+        """Test streaming with many records to ensure no memory issues."""
+        path = tmp_path / "large_stream.loop"
+        n = 5000
+        
+        writer = StreamingLoopWriter(path, block_size=100)
+        for i in range(n):
+            writer.add({
+                "messages": [
+                    {"role": "user", "content": f"Q{i}"},
+                    {"role": "assistant", "content": f"A{i}"},
+                ],
+                "quality": 0.7 + (i % 30) / 100,
+            })
+        writer.finalize()
+
+        reader = LoopReader(path)
+        assert reader._header["n_records"] == n
+        assert reader.count() == n
+
+    def test_streaming_context_manager_cleanup(self, tmp_path):
+        """Test that temp files are cleaned up on exception."""
+        path = tmp_path / "fail.loop"
+        
+        try:
+            with StreamingLoopWriter(path) as w:
+                w.add(SAMPLE_RECORD)
+                raise RuntimeError("Forced error")
+        except RuntimeError:
+            pass  # Expected
+
+        # Temp file should be cleaned up
+        temp_files = list(tmp_path.glob("loop_stream_*.tmp"))
+        assert len(temp_files) == 0, f"Temp files not cleaned: {temp_files}"
+
+    def test_streaming_same_as_regular_writer(self, tmp_path):
+        """Verify streaming and regular writer produce equivalent output."""
+        path1 = tmp_path / "regular.loop"
+        path2 = tmp_path / "streaming.loop"
+
+        # Regular writer
+        w1 = LoopWriter(path1, metadata={"name": "test"})
+        for r in SAMPLE_RECORDS[:50]:
+            w1.add(r)
+        w1.save()
+
+        # Streaming writer
+        w2 = StreamingLoopWriter(path2, metadata={"name": "test"})
+        for r in SAMPLE_RECORDS[:50]:
+            w2.add(r)
+        w2.finalize()
+
+        # Both should produce same number of records
+        r1 = LoopReader(path1)
+        r2 = LoopReader(path2)
+        
+        assert r1._header["n_records"] == r2._header["n_records"]
+        assert len(r1.to_list()) == len(r2.to_list())
+
 
 class TestIntegrity:
 

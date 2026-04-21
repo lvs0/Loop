@@ -12,11 +12,20 @@ Format natif pour le fine-tuning de LLMs :
 """
 
 from looplib.writer import LoopWriter
-from looplib.streaming import StreamingLoopWriter
 from looplib.reader import LoopReader
 from looplib.validator import LoopValidator, ValidationError
 from looplib.packer import SequencePacker
 
 __version__ = "1.0.0"
 __format_version__ = (1, 0)
-__all__ = ["LoopWriter", "StreamingLoopWriter", "LoopReader", "LoopValidator", "SequencePacker", "ValidationError"]
+__all__ = ["LoopWriter", "LoopReader", "LoopValidator", "SequencePacker", "ValidationError"]
+
+
+def main():
+    """Entry point for python -m looplib"""
+    from looplib.cli import main as cli_main
+    cli_main()
+
+
+if __name__ == "__main__":
+    main()

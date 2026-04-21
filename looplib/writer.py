@@ -22,13 +22,15 @@ Exemple d'utilisation :
     writer.save()
 """
 
+from __future__ import annotations
+
 import json
 import struct
 import hashlib
 import logging
 import time
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
 import zstandard as zstd
 
@@ -85,7 +87,7 @@ class LoopWriter:
 
     def __init__(
         self,
-        path: str | Path,
+        path: Union[str, Path],
         metadata: Optional[Dict[str, Any]] = None,
         block_size: int = MAX_BLOCK_SIZE,
         validate: bool = True,

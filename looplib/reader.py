@@ -230,8 +230,13 @@ class LoopReader:
                 "Installer HuggingFace datasets : pip install datasets"
             )
 
+        # Collect records first to avoid pickling issues with generator
+        # For large datasets, this loads into RAM but ensures compatibility
+        records = list(self.stream(min_quality=min_quality, split=split))
+        
         def gen():
-            yield from self.stream(min_quality=min_quality, split=split)
+            for record in records:
+                yield record
 
         return Dataset.from_generator(gen)
 

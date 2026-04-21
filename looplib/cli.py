@@ -13,6 +13,8 @@ Usage :
   loop info coding_fr.loop
 """
 
+from __future__ import annotations
+
 import sys
 import json
 import time
@@ -20,9 +22,49 @@ import struct
 import logging
 import argparse
 from pathlib import Path
+from typing import Optional, List, Dict, Any, Iterator
+
+try:
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+    from rich.console import Console
+    RICH_AVAILABLE = True
+    console = Console()
+except ImportError:
+    RICH_AVAILABLE = False
+    console = None
 
 logging.basicConfig(format="[loop] %(levelname)s: %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _progress_context(desc: str, total: Optional[int] = None):
+    """Context manager for progress display (rich if available, else silent)."""
+    if RICH_AVAILABLE and total:
+        return Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        )
+    elif RICH_AVAILABLE:
+        return Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        )
+    else:
+        # Dummy context manager when rich is not available
+        class DummyProgress:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def add_task(self, *args, **kwargs):
+                return 0
+            def update(self, *args, **kwargs):
+                pass
+        return DummyProgress()
 
 
 def cmd_info(args) -> None:
@@ -108,17 +150,22 @@ def cmd_validate(args) -> None:
         _print_result(errors, warnings)
         return
 
-    # 3. Lecture de tous les blocs
+    # 3. Lecture de tous les blocs avec progress
     total_records = 0
+    n_blocks = reader._header["n_blocks"]
     start = time.time()
-    try:
-        for block_idx in range(reader._header["n_blocks"]):
-            records = reader.read_block(block_idx)
-            total_records += len(records)
-        elapsed = time.time() - start
-        print(f"  ✓ Tous les blocs lus ({total_records:,} records en {elapsed:.2f}s)")
-    except Exception as e:
-        errors.append(f"Erreur de lecture des blocs : {e}")
+    
+    with _progress_context("Validation des blocs", total=n_blocks) as progress:
+        task = progress.add_task("Validation", total=n_blocks)
+        try:
+            for block_idx in range(n_blocks):
+                records = reader.read_block(block_idx)
+                total_records += len(records)
+                progress.update(task, advance=1)
+            elapsed = time.time() - start
+            print(f"  ✓ Tous les blocs lus ({total_records:,} records en {elapsed:.2f}s)")
+        except Exception as e:
+            errors.append(f"Erreur de lecture des blocs : {e}")
 
     # 4. Cohérence count
     declared  = reader._header["n_records"]
@@ -162,6 +209,9 @@ def cmd_convert(args) -> None:
         print(f"Fichier introuvable : {input_path}")
         sys.exit(1)
 
+    # Count total lines for progress bar
+    total_lines = sum(1 for _ in open(input_path, "r", encoding="utf-8"))
+
     metadata = {
         "name":     args.name or input_path.stem,
         "category": args.category or "general",
@@ -175,21 +225,25 @@ def cmd_convert(args) -> None:
 
     print(f"Conversion : {input_path} → {output_path}")
 
-    with open(input_path, "r", encoding="utf-8") as f:
-        for lineno, line in enumerate(f, 1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-                # Normaliser si le format est "instruction/output" plutôt que "messages"
-                if "messages" not in record:
-                    record = _normalize_record(record)
-                writer.add(record)
-                count += 1
-            except (json.JSONDecodeError, ValidationError) as e:
-                logger.debug(f"Ligne {lineno} ignorée : {e}")
-                skipped += 1
+    with _progress_context("Conversion", total=total_lines) as progress:
+        task = progress.add_task("Conversion", total=total_lines)
+        with open(input_path, "r", encoding="utf-8") as f:
+            for lineno, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    progress.update(task, advance=1)
+                    continue
+                try:
+                    record = json.loads(line)
+                    # Normaliser si le format est "instruction/output" plutôt que "messages"
+                    if "messages" not in record:
+                        record = _normalize_record(record)
+                    writer.add(record)
+                    count += 1
+                except (json.JSONDecodeError, ValidationError) as e:
+                    logger.debug(f"Ligne {lineno} ignorée : {e}")
+                    skipped += 1
+                progress.update(task, advance=1)
 
     size = writer.save()
     print(f"  ✓ {count:,} records convertis ({skipped} ignorés)")
@@ -537,6 +591,76 @@ def cmd_merge(args) -> None:
     print(f"  ✓ Fichier  : {output_path} ({size / 1024:.1f} KB)\n")
 
 
+def cmd_inspect(args) -> None:
+    """Inspecte un record spécifique ou un échantillon aléatoire."""
+    from looplib.reader import LoopReader
+
+    reader = LoopReader(args.file)
+    info = reader.info()
+
+    # Determine which record(s) to show
+    if args.record is not None:
+        # Specific record by index
+        if args.record < 0 or args.record >= info["n_records"]:
+            print(f"Index hors limites : {args.record} (max: {info['n_records'] - 1})")
+            sys.exit(1)
+        
+        # Find which block contains this record
+        block_idx = args.record // info["block_size"]
+        offset_in_block = args.record % info["block_size"]
+        
+        records = reader.read_block(block_idx)
+        if offset_in_block >= len(records):
+            print(f"Record {args.record} non trouvé dans le bloc {block_idx}")
+            sys.exit(1)
+        
+        records_to_show = [(args.record, records[offset_in_block])]
+    else:
+        # Sample random records
+        import random
+        sample_size = min(args.sample or 3, info["n_records"])
+        indices = sorted(random.sample(range(info["n_records"]), sample_size))
+        
+        records_to_show = []
+        for idx in indices:
+            block_idx = idx // info["block_size"]
+            offset_in_block = idx % info["block_size"]
+            block_records = reader.read_block(block_idx)
+            if offset_in_block < len(block_records):
+                records_to_show.append((idx, block_records[offset_in_block]))
+
+    # Display records
+    print(f"\n{'─' * 60}")
+    print(f"  Inspection : {args.file}")
+    print(f"{'─' * 60}")
+    
+    for idx, record in records_to_show:
+        print(f"\n  Record #{idx}")
+        print(f"  {'─' * 56}")
+        
+        # Messages
+        print(f"  Messages ({len(record.get('messages', []))}):")
+        for i, msg in enumerate(record.get('messages', [])):
+            role = msg.get('role', '?')
+            content = msg.get('content', '')
+            # Truncate long content
+            if len(content) > 200 and not args.full:
+                content = content[:200] + "... [truncated, use --full]"
+            print(f"    [{role:10}] {content[:80]}{'...' if len(content) > 80 else ''}")
+        
+        # Metadata fields
+        meta_fields = ['quality', 'language', 'split', 'source', 'tokens', 'tags']
+        meta = {k: record.get(k) for k in meta_fields if k in record}
+        if meta:
+            print(f"\n  Métadonnées:")
+            for k, v in meta.items():
+                if k == 'tags' and isinstance(v, list):
+                    v = ', '.join(v)
+                print(f"    {k:12} : {v}")
+    
+    print(f"\n{'─' * 60}\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="loop",
@@ -595,6 +719,13 @@ def main() -> None:
     p_merge.add_argument("--output", "-o", required=True, help="Fichier de sortie (.loop)")
     p_merge.add_argument("--name",         help="Nom du dataset fusionné")
 
+    # loop inspect
+    p_inspect = subparsers.add_parser("inspect", help="Inspecter un record spécifique")
+    p_inspect.add_argument("file", help="Fichier .loop")
+    p_inspect.add_argument("--record", "-r", type=int, default=None, help="Index du record à inspecter")
+    p_inspect.add_argument("--sample", "-s", type=int, default=3, help="Nombre d'enregistrements à échantillonner (défaut: 3)")
+    p_inspect.add_argument("--full", "-f", action="store_true", help="Afficher le contenu complet des messages")
+
     args = parser.parse_args()
 
     commands = {
@@ -606,6 +737,7 @@ def main() -> None:
         "count":    cmd_count,
         "merge":    cmd_merge,
         "pack":     cmd_pack,
+        "inspect":  cmd_inspect,
     }
     commands[args.command](args)
 
