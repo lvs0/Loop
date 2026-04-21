@@ -661,6 +661,37 @@ def cmd_inspect(args) -> None:
     print(f"\n{'─' * 60}\n")
 
 
+def cmd_patch_create(args) -> None:
+    """Crée un fichier patch (.looppatch) à partir de nouveaux records."""
+    from looplib.patcher import LoopPatcher, PatchError
+
+    input_path = Path(args.records)
+    if not input_path.exists():
+        print(f"Fichier source introuvable : {input_path}")
+        sys.exit(1)
+
+    try:
+        size = LoopPatcher.create(args.base, args.records, args.output)
+        print(f"\n  ✓ Patch créé : {args.output}")
+        print(f"  ✓ Taille     : {size / 1024:.1f} KB\n")
+    except PatchError as e:
+        print(f"\n  ✗ Erreur : {e}\n")
+        sys.exit(1)
+
+
+def cmd_patch_apply(args) -> None:
+    """Applique un fichier patch (.looppatch) à un fichier .loop."""
+    from looplib.patcher import LoopPatcher, PatchError
+
+    try:
+        size = LoopPatcher.apply(args.base, args.patch, args.output)
+        print(f"\n  ✓ Patch appliqué : {args.output}")
+        print(f"  ✓ Taille fusionnée : {size / 1024:.1f} KB\n")
+    except PatchError as e:
+        print(f"\n  ✗ Erreur : {e}\n")
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="loop",
@@ -726,6 +757,18 @@ def main() -> None:
     p_inspect.add_argument("--sample", "-s", type=int, default=3, help="Nombre d'enregistrements à échantillonner (défaut: 3)")
     p_inspect.add_argument("--full", "-f", action="store_true", help="Afficher le contenu complet des messages")
 
+    # loop patch create
+    p_patch_create = subparsers.add_parser("patch-create", help="Créer un fichier patch (.looppatch)")
+    p_patch_create.add_argument("base", help="Fichier .loop de base")
+    p_patch_create.add_argument("records", help="Fichier JSONL avec les nouveaux records")
+    p_patch_create.add_argument("-o", "--output", required=True, help="Fichier patch de sortie (.looppatch)")
+
+    # loop patch apply
+    p_patch_apply = subparsers.add_parser("patch-apply", help="Appliquer un fichier patch (.looppatch)")
+    p_patch_apply.add_argument("base", help="Fichier .loop de base")
+    p_patch_apply.add_argument("patch", help="Fichier patch (.looppatch)")
+    p_patch_apply.add_argument("-o", "--output", required=True, help="Fichier .loop fusionné de sortie")
+
     args = parser.parse_args()
 
     commands = {
@@ -738,6 +781,8 @@ def main() -> None:
         "merge":    cmd_merge,
         "pack":     cmd_pack,
         "inspect":  cmd_inspect,
+        "patch-create": cmd_patch_create,
+        "patch-apply":  cmd_patch_apply,
     }
     commands[args.command](args)
 

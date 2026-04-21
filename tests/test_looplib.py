@@ -458,6 +458,187 @@ class TestSequencePacker:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Tests LoopPatcher
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestLoopPatcher:
+
+    def test_create_patch_from_jsonl(self, tmp_path):
+        """Test creating a patch from a JSONL file."""
+        from looplib.patcher import LoopPatcher, PatchError
+
+        # Create base .loop file
+        base_path = tmp_path / "base.loop"
+        writer = LoopWriter(base_path, metadata={"name": "base"})
+        writer.add_many(SAMPLE_RECORDS[:20])
+        writer.save()
+
+        # Create JSONL with new records
+        new_records_path = tmp_path / "new_records.jsonl"
+        with open(new_records_path, "w") as f:
+            for i in range(5):
+                record = {
+                    "messages": [
+                        {"role": "user", "content": f"New Q{i}"},
+                        {"role": "assistant", "content": f"New A{i}"},
+                    ],
+                    "quality": 0.8,
+                    "split": "train",
+                }
+                f.write(json.dumps(record) + "\n")
+
+        # Create patch
+        patch_path = tmp_path / "update.looppatch"
+        size = LoopPatcher.create(base_path, new_records_path, patch_path)
+        assert size > 0
+        assert patch_path.exists()
+
+    def test_apply_patch(self, tmp_path):
+        """Test applying a patch to a base file."""
+        from looplib.patcher import LoopPatcher
+
+        # Create base .loop file
+        base_path = tmp_path / "base.loop"
+        writer = LoopWriter(base_path, metadata={"name": "base"})
+        writer.add_many(SAMPLE_RECORDS[:20])
+        writer.save()
+
+        # Create JSONL with new records
+        new_records_path = tmp_path / "new_records.jsonl"
+        new_records = []
+        with open(new_records_path, "w") as f:
+            for i in range(5):
+                record = {
+                    "messages": [
+                        {"role": "user", "content": f"New Q{i}"},
+                        {"role": "assistant", "content": f"New A{i}"},
+                    ],
+                    "quality": 0.8,
+                    "split": "train",
+                }
+                new_records.append(record)
+                f.write(json.dumps(record) + "\n")
+
+        # Create and apply patch
+        patch_path = tmp_path / "update.looppatch"
+        LoopPatcher.create(base_path, new_records_path, patch_path)
+
+        merged_path = tmp_path / "merged.loop"
+        size = LoopPatcher.apply(base_path, patch_path, merged_path)
+        assert size > 0
+        assert merged_path.exists()
+
+        # Verify merged file has all records
+        reader = LoopReader(merged_path)
+        assert reader.count() == 25  # 20 base + 5 new
+
+    def test_patch_incompatible_crc_raises(self, tmp_path):
+        """Test that applying a patch to wrong base file raises error."""
+        from looplib.patcher import LoopPatcher, PatchError
+
+        # Create two different base files
+        base1_path = tmp_path / "base1.loop"
+        writer1 = LoopWriter(base1_path, metadata={"name": "base1"})
+        writer1.add_many(SAMPLE_RECORDS[:10])
+        writer1.save()
+
+        base2_path = tmp_path / "base2.loop"
+        writer2 = LoopWriter(base2_path, metadata={"name": "base2"})
+        writer2.add_many(SAMPLE_RECORDS[10:20])
+        writer2.save()
+
+        # Create patch for base1
+        new_records_path = tmp_path / "new_records.jsonl"
+        with open(new_records_path, "w") as f:
+            record = {
+                "messages": [
+                    {"role": "user", "content": "Q"},
+                    {"role": "assistant", "content": "A"},
+                ],
+            }
+            f.write(json.dumps(record) + "\n")
+
+        patch_path = tmp_path / "update.looppatch"
+        LoopPatcher.create(base1_path, new_records_path, patch_path)
+
+        # Try to apply to base2 - should fail
+        merged_path = tmp_path / "merged.loop"
+        with pytest.raises(PatchError, match="CRC incompatible"):
+            LoopPatcher.apply(base2_path, patch_path, merged_path)
+
+    def test_patch_create_from_list(self, tmp_path):
+        """Test creating a patch from a list of records."""
+        from looplib.patcher import LoopPatcher
+
+        # Create base .loop file
+        base_path = tmp_path / "base.loop"
+        writer = LoopWriter(base_path, metadata={"name": "base"})
+        writer.add_many(SAMPLE_RECORDS[:10])
+        writer.save()
+
+        # Create patch from list
+        new_records = [
+            {
+                "messages": [
+                    {"role": "user", "content": f"List Q{i}"},
+                    {"role": "assistant", "content": f"List A{i}"},
+                ],
+            }
+            for i in range(3)
+        ]
+
+        patch_path = tmp_path / "update.looppatch"
+        size = LoopPatcher.create(base_path, new_records, patch_path)
+        assert size > 0
+        assert patch_path.exists()
+
+        # Apply and verify
+        merged_path = tmp_path / "merged.loop"
+        LoopPatcher.apply(base_path, patch_path, merged_path)
+        reader = LoopReader(merged_path)
+        assert reader.count() == 13  # 10 base + 3 new
+
+    def test_patch_empty_records_raises(self, tmp_path):
+        """Test that creating a patch with no records raises error."""
+        from looplib.patcher import LoopPatcher, PatchError
+
+        # Create base .loop file
+        base_path = tmp_path / "base.loop"
+        writer = LoopWriter(base_path, metadata={"name": "base"})
+        writer.add_many(SAMPLE_RECORDS[:10])
+        writer.save()
+
+        # Try to create empty patch
+        patch_path = tmp_path / "empty.looppatch"
+        with pytest.raises(PatchError, match="Aucun record"):
+            LoopPatcher.create(base_path, [], patch_path)
+
+    def test_patch_magic_bytes(self, tmp_path):
+        """Test that patch file has correct magic bytes."""
+        from looplib.patcher import LoopPatcher, MAGIC_PATCH_HEADER, MAGIC_PATCH_FOOTER
+
+        # Create base .loop file
+        base_path = tmp_path / "base.loop"
+        writer = LoopWriter(base_path, metadata={"name": "base"})
+        writer.add_many(SAMPLE_RECORDS[:10])
+        writer.save()
+
+        # Create patch
+        new_records = [{"messages": [{"role": "user", "content": "Q"}, {"role": "assistant", "content": "A"}]}]
+        patch_path = tmp_path / "update.looppatch"
+        LoopPatcher.create(base_path, new_records, patch_path)
+
+        # Verify magic bytes
+        with open(patch_path, "rb") as f:
+            header_magic = f.read(4)
+            f.seek(-4, 2)
+            footer_magic = f.read(4)
+
+        assert header_magic == MAGIC_PATCH_HEADER
+        assert footer_magic == MAGIC_PATCH_FOOTER
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Tests intégrité
 # ──────────────────────────────────────────────────────────────────────────────
 

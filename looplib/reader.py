@@ -430,3 +430,12 @@ class LoopReader:
         raw  = self._decompressor.decompress(compressed)
         meta = json.loads(raw.decode("utf-8"))
         return meta
+
+    def _parse_footer_crc(self) -> int:
+        """Lit le CRC64 du footer (utilisé pour les patches)."""
+        with open(self.path, "rb") as f:
+            f.seek(-FOOTER_SIZE + 4, 2)  # Skip metadata_size (4 bytes), read CRC (8 bytes)
+            raw_crc = f.read(8)
+            if len(raw_crc) < 8:
+                raise LoopParseError("Footer trop court pour lire le CRC")
+            return struct.unpack("<Q", raw_crc)[0]
