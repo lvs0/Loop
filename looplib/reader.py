@@ -47,6 +47,11 @@ class LoopReader:
 
     Le fichier n'est jamais chargé entièrement en RAM.
     La lecture se fait bloc par bloc, le bloc courant étant le seul en mémoire.
+
+    Example:
+        reader = LoopReader("dataset.loop")
+        for record in reader.stream(min_quality=0.8):
+            print(record["messages"])
     """
 
     def __init__(self, path: str | Path) -> None:
@@ -58,6 +63,16 @@ class LoopReader:
         self._file_size  = 0
 
         self._parse_header_and_index()
+
+    def __repr__(self) -> str:
+        """Représentation concise pour debugging."""
+        if self._header:
+            return (
+                f"<LoopReader path='{self.path.name}' "
+                f"records={self._header['n_records']:,} "
+                f"blocks={self._header['n_blocks']}>"
+            )
+        return f"<LoopReader path='{self.path}' (uninitialized)>"
 
     # ──────────────────────────────────────────────────────────────────────────
     # API publique

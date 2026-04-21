@@ -24,6 +24,8 @@ import argparse
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Iterator
 
+from looplib import __version__, __format_version__
+
 try:
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
     from rich.console import Console
@@ -696,6 +698,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="loop",
         description="Outil CLI pour le format .loop",
+    )
+    parser.add_argument(
+        "--version", "-v",
+        action="version",
+        version=f"loop {__version__} (format v{__format_version__[0]}.{__format_version__[1]})"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

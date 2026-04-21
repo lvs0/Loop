@@ -18,6 +18,15 @@ from looplib.validator import LoopValidator, ValidationError
 from looplib.packer import SequencePacker
 from looplib.patcher import LoopPatcher, PatchError
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __format_version__ = (1, 0)
-__all__ = ["LoopWriter", "StreamingLoopWriter", "LoopReader", "LoopValidator", "SequencePacker", "ValidationError", "LoopPatcher", "PatchError"]
+__all__ = [
+    "LoopWriter",
+    "StreamingLoopWriter",
+    "LoopReader",
+    "LoopValidator",
+    "SequencePacker",
+    "LoopPatcher",
+    "ValidationError",
+    "PatchError",
+]

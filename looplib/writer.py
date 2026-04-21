@@ -76,7 +76,13 @@ class LoopWriter:
 
     Le fichier est construit en mémoire par blocs puis écrit d'un seul coup
     lors de l'appel à .save(). Pour des datasets très larges (>10GB), utiliser
-    LoopWriter en mode streaming (à venir en v1.1).
+    StreamingLoopWriter.
+    
+    Example:
+        writer = LoopWriter("output.loop", metadata={"name": "my_dataset"})
+        for record in records:
+            writer.add(record)
+        writer.save()
     """
 
     SCHEMA = {
@@ -118,6 +124,17 @@ class LoopWriter:
         self._sources        = set()
         self._tags           = set()
         self._crc_data       = b""  # accumulation pour CRC64 final
+
+    def __repr__(self) -> str:
+        """Représentation concise pour debugging."""
+        n_blocks_finalized = len(self._blocks)
+        n_buffered = len(self._records)
+        return (
+            f"<LoopWriter path='{self.path.name}' "
+            f"records_added={self._n_records:,} "
+            f"blocks={n_blocks_finalized} "
+            f"buffered={n_buffered}>"
+        )
 
     # ──────────────────────────────────────────────────────────────────────────
     # API publique
