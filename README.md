@@ -102,6 +102,12 @@ loop stats coding_fr.loop --plot
 
 # Filtrer et exporter
 loop filter coding_fr.loop --min-quality 0.75 --output coding_fr_filtered.loop
+
+# Créer un patch (mise à jour incrémentale)
+loop patch-create coding_fr.loop new_records.jsonl --output update.looppatch
+
+# Appliquer un patch
+loop patch-apply coding_fr.loop update.looppatch --output coding_fr_v2.loop
 ```
 
 ---
@@ -128,6 +134,30 @@ loop filter coding_fr.loop --min-quality 0.75 --output coding_fr_filtered.loop
 ```
 
 Spec complète → [SPEC.md](./SPEC.md)
+
+---
+
+## Format .looppatch (mises à jour incrémentales)
+
+Le format `.looppatch` permet d'ajouter des données à un fichier `.loop` existant sans le réécrire entièrement — utile pour les mises à jour incrémentales.
+
+```
+┌─────────────────────────────────────────┐
+│  HEADER          32 bytes               │
+│  magic "PTCH" · source_crc64 · stats   │
+├─────────────────────────────────────────┤
+│  INDEX           n_blocs × 24 bytes     │
+├─────────────────────────────────────────┤
+│  DATA BLOCS      (nouveaux records)     │
+├─────────────────────────────────────────┤
+│  METADATA        Zstd(JSON)             │
+├─────────────────────────────────────────┤
+│  FOOTER          8 bytes                │
+│  meta_size · magic "HCTP"               │
+└─────────────────────────────────────────┘
+```
+
+**Vérification d'intégrité** : Le patch contient le CRC64 du fichier source attendu. Si le fichier de base a été modifié, le patch refusera de s'appliquer.
 
 ---
 
