@@ -172,34 +172,78 @@ class LoopReader:
     def count(
         self,
         min_quality: Optional[float] = None,
+        max_quality: Optional[float] = None,
         split:       Optional[str]   = None,
+        language:    Optional[str]   = None,
+        tags:        Optional[List[str]] = None,
     ) -> int:
         """
         Compte les records correspondant aux filtres sans les charger tous.
 
         Si aucun filtre n'est donné, retourne directement n_records du header.
         """
-        if min_quality is None and split is None:
+        if all(x is None for x in (min_quality, max_quality, split, language, tags)):
             return self._header["n_records"]
 
-        return sum(1 for _ in self.stream(min_quality=min_quality, split=split))
+        return sum(
+            1
+            for _ in self.stream(
+                min_quality=min_quality,
+                max_quality=max_quality,
+                split=split,
+                language=language,
+                tags=tags,
+            )
+        )
 
     def to_list(
         self,
         min_quality: Optional[float] = None,
+        max_quality: Optional[float] = None,
         split:       Optional[str]   = None,
+        language:    Optional[str]   = None,
+        tags:        Optional[List[str]] = None,
+        max_records: Optional[int]   = None,
     ) -> List[Dict[str, Any]]:
-        """Charge tous les records (filtrés) en mémoire. Attention à la RAM."""
-        return list(self.stream(min_quality=min_quality, split=split))
+        """Charge les records (filtrés) en mémoire.
+
+        Args:
+            max_records: Si renseigné, limite le nombre de records chargés.
+        """
+        count = 0
+        records = []
+        for record in self.stream(
+            min_quality=min_quality,
+            max_quality=max_quality,
+            split=split,
+            language=language,
+            tags=tags,
+        ):
+            records.append(record)
+            count += 1
+            if max_records and count >= max_records:
+                break
+        return records
 
     def to_jsonl(
         self,
         output_path:  str | Path,
         min_quality:  Optional[float] = None,
+        max_quality:  Optional[float] = None,
         split:        Optional[str]   = None,
+        language:     Optional[str]   = None,
+        tags:         Optional[List[str]] = None,
     ) -> int:
         """
         Exporte vers JSONL.
+
+        Args:
+            output_path: Chemin du fichier JSONL de sortie.
+            min_quality: Score qualité minimum (0.0–1.0).
+            max_quality: Score qualité maximum.
+            split:       "train", "val", "test", ou None (tous).
+            language:    Code de langue ISO 639-1 (ex: "fr").
+            tags:        Liste de tags — le record doit avoir AU MOINS un de ces tags.
 
         Returns:
             Nombre de records exportés.
@@ -208,7 +252,13 @@ class LoopReader:
         count       = 0
 
         with open(output_path, "w", encoding="utf-8") as f:
-            for record in self.stream(min_quality=min_quality, split=split):
+            for record in self.stream(
+                min_quality=min_quality,
+                max_quality=max_quality,
+                split=split,
+                language=language,
+                tags=tags,
+            ):
                 f.write(json.dumps(record, ensure_ascii=False))
                 f.write("\n")
                 count += 1
@@ -219,7 +269,10 @@ class LoopReader:
     def to_huggingface(
         self,
         min_quality: Optional[float] = None,
+        max_quality: Optional[float] = None,
         split:       Optional[str]   = None,
+        language:    Optional[str]   = None,
+        tags:        Optional[List[str]] = None,
         batch_size:  int            = 1000,
     ):
         """
@@ -230,7 +283,10 @@ class LoopReader:
 
         Args:
             min_quality: Score qualité minimum pour filtrer.
+            max_quality: Score qualité maximum pour filtrer.
             split:       Split à exporter ("train", "val", "test").
+            language:    Code langue ISO 639-1 (ex: "fr").
+            tags:        Liste de tags — le record doit avoir au moins un de ces tags.
             batch_size:  Nombre de records par lot (pour info seulement).
 
         Returns:
@@ -245,10 +301,16 @@ class LoopReader:
                 "Installer HuggingFace datasets : pip install datasets"
             )
 
-        # Collect records first to avoid pickling issues with generator
-        # For large datasets, this loads into RAM but ensures compatibility
-        records = list(self.stream(min_quality=min_quality, split=split))
-        
+        # Collect records into a list first — the generator captures self._decompressor
+        # which is not picklable, and HF datasets uses multiprocessing for the generator.
+        records = list(self.stream(
+            min_quality=min_quality,
+            max_quality=max_quality,
+            split=split,
+            language=language,
+            tags=tags,
+        ))
+
         def gen():
             for record in records:
                 yield record
@@ -272,10 +334,10 @@ class LoopReader:
         Example:
             reader = LoopReader("coding_fr.loop")
             for packed in reader.packed_sequences(tokenizer, max_seq_len=2048, min_quality=0.70):
-                input_ids      = packed["input_ids"]       # [2048]
-                labels         = packed["labels"]          # [2048]  -100 on prompts
-                attention_mask = packed["attention_mask"]  # [2048]
-                position_ids   = packed["position_ids"]    # [2048]
+                input_ids      = packed["input_ids"]       # List[int], length max_seq_len
+                labels         = packed["labels"]          # List[int], length max_seq_len, -100 on prompts
+                attention_mask = packed["attention_mask"] # List[int], length max_seq_len
+                position_ids   = packed["position_ids"]    # List[int], length max_seq_len
 
         Args:
             tokenizer:    HuggingFace tokenizer (must have apply_chat_template).
@@ -285,9 +347,10 @@ class LoopReader:
 
         Yields:
             dict with keys: input_ids, labels, attention_mask, position_ids.
-            All lists have exactly max_seq_len elements.
+            All values are Python lists of exactly max_seq_len elements.
 
-        Note: Requires the ``transformers`` library.
+        Note: Requires the ``transformers`` library. Returns plain lists,
+              not torch.Tensors — convert manually if needed for training.
         """
         from looplib.packer import SequencePacker
         packer = SequencePacker(tokenizer, max_seq_len=max_seq_len)

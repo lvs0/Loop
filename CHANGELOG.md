@@ -2,6 +2,17 @@
 
 All notable changes to the looplib project will be documented in this file.
 
+## [1.0.2] - 2026-04-22
+
+### Added
+- `LoopReader.count()`, `to_list()`, `to_jsonl()`, `to_huggingface()` now accept all stream filters:
+  `max_quality`, `language`, `tags` (previously only `min_quality` and `split` were supported)
+- `LoopReader.to_list()` gains `max_records` parameter to limit loaded records
+- `to_huggingface()` now uses lazy generator instead of pre-loading all records into RAM
+
+### Changed
+- `LoopReader.packed_sequences()` docstring: clarifies it returns Python lists, not torch.Tensors
+
 ## [1.0.1] - 2026-04-21
 
 ### Added
