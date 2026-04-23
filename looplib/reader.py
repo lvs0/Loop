@@ -225,6 +225,25 @@ class LoopReader:
                 break
         return records
 
+    def to_dicts(
+        self,
+        min_quality: Optional[float] = None,
+        max_quality: Optional[float] = None,
+        split:       Optional[str]   = None,
+        language:    Optional[str]   = None,
+        tags:        Optional[List[str]] = None,
+        max_records: Optional[int]   = None,
+    ) -> List[Dict[str, Any]]:
+        """Alias for ``to_list`` — Charge les records filtrés en mémoire."""
+        return self.to_list(
+            min_quality=min_quality,
+            max_quality=max_quality,
+            split=split,
+            language=language,
+            tags=tags,
+            max_records=max_records,
+        )
+
     def to_jsonl(
         self,
         output_path:  str | Path,
@@ -278,8 +297,9 @@ class LoopReader:
         """
         Exporte vers un datasets.Dataset HuggingFace via streaming.
 
-        Utilise un générateur plutôt que de charger tous les records en RAM,
-        ce qui permet d'exporter des datasets volumineux sans épuiser la mémoire.
+        Utilise un générateur picklable qui ré-ouvre le fichier à chaque itération,
+        permettant l'export de datasets volumineux sans charger tout en RAM,
+        et compatible avec le multiprocessing de HuggingFace datasets.
 
         Args:
             min_quality: Score qualité minimum pour filtrer.
@@ -290,32 +310,35 @@ class LoopReader:
             batch_size:  Nombre de records par lot (pour info seulement).
 
         Returns:
-            datasets.Dataset configuré pour un entraînement LLM.
+            datasets.IterableDataset configuré pour un entraînement LLM.
 
         Nécessite : pip install datasets
         """
         try:
-            from datasets import Dataset
+            from datasets import IterableDataset
         except ImportError:
             raise ImportError(
                 "Installer HuggingFace datasets : pip install datasets"
             )
 
-        # Collect records into a list first — the generator captures self._decompressor
-        # which is not picklable, and HF datasets uses multiprocessing for the generator.
-        records = list(self.stream(
-            min_quality=min_quality,
-            max_quality=max_quality,
-            split=split,
-            language=language,
-            tags=tags,
-        ))
+        # Generator factory — each worker process re-opens the file independently,
+        # avoiding the pickling issue with zstd decompressor.
+        path_arg     = str(self.path)
+        header       = self._header
+        file_size    = self._file_size
 
-        def gen():
-            for record in records:
-                yield record
+        def _hf_stream():
+            """Generator that re-opens the file each call (for multiprocessing safety)."""
+            reader = LoopReader(path_arg)
+            yield from reader.stream(
+                min_quality=min_quality,
+                max_quality=max_quality,
+                split=split,
+                language=language,
+                tags=tags,
+            )
 
-        return Dataset.from_generator(gen)
+        return IterableDataset.from_generator(_hf_stream)
 
     def packed_sequences(
         self,
@@ -355,6 +378,68 @@ class LoopReader:
         from looplib.packer import SequencePacker
         packer = SequencePacker(tokenizer, max_seq_len=max_seq_len)
         yield from packer.pack(self.stream(min_quality=min_quality, split=split))
+
+    def deduplicate(
+        self,
+        output_path: Optional[str | Path] = None,
+        min_quality: Optional[float] = None,
+        split:       Optional[str]   = None,
+        language:    Optional[str]   = None,
+        tags:        Optional[List[str]] = None,
+    ) -> Dict[str, int]:
+        """
+        Dédoublonne les records par contenu des messages.
+
+        Utilise un hash canonique des messages (rôles + contenu, sans métadonnées)
+        pour identifier les doublons. Garde le premier record vu de chaque groupe.
+
+        Args:
+            output_path: Si renseigné, écrit le fichier dédoublonné ici.
+            min_quality: Score qualité minimum pour filtrer avant dédoublonnage.
+            split:       Split à dédoublonner ("train", "val", "test").
+            language:    Code langue ISO 639-1.
+            tags:        Tags à filtrer.
+
+        Returns:
+            dict avec "total", "unique", "duplicates" comptages.
+        """
+        import hashlib
+
+        def _record_hash(record: Dict[str, Any]) -> str:
+            """Hash canonique basé sur les messages (ignorer quality/source/tokens)."""
+            msgs = []
+            for m in record.get("messages", []):
+                msgs.append((m.get("role", ""), m.get("content", "")))
+            raw = json.dumps(msgs, sort_keys=True, ensure_ascii=False)
+            return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+        seen: set[str] = set()
+        unique_records: list[Dict[str, Any]] = []
+        total = 0
+
+        for record in self.stream(min_quality=min_quality, split=split,
+                                   language=language, tags=tags):
+            total += 1
+            h = _record_hash(record)
+            if h not in seen:
+                seen.add(h)
+                unique_records.append(record)
+
+        n_dupes = total - len(unique_records)
+        result = {"total": total, "unique": len(unique_records), "duplicates": n_dupes}
+        logger.info(
+            f"Dédoublonnage : {total} total, {len(unique_records)} uniques, "
+            f"{n_dupes} doublons retirés"
+        )
+
+        if output_path:
+            from looplib.writer import LoopWriter
+            writer = LoopWriter(Path(output_path), metadata=dict(self.metadata))
+            writer.add_many(unique_records)
+            writer.save()
+            logger.info(f"Fichier dédoublonné écrit : {output_path}")
+
+        return result
 
     @property
     def metadata(self) -> Dict[str, Any]:
