@@ -273,13 +273,14 @@ class LoopReader:
         split:       Optional[str]   = None,
         language:    Optional[str]   = None,
         tags:        Optional[List[str]] = None,
-        batch_size:  int            = 1000,
     ):
         """
         Exporte vers un datasets.Dataset HuggingFace via streaming.
 
-        Utilise un générateur plutôt que de charger tous les records en RAM,
-        ce qui permet d'exporter des datasets volumineux sans épuiser la mémoire.
+
+        Utilise un générateur lazy qui lit les records directement depuis le
+        fichier .loop (sans tout charger en RAM au préalable), permettant
+        d'exporter des datasets volumineux sans épuiser la mémoire.
 
         Args:
             min_quality: Score qualité minimum pour filtrer.
@@ -287,7 +288,6 @@ class LoopReader:
             split:       Split à exporter ("train", "val", "test").
             language:    Code langue ISO 639-1 (ex: "fr").
             tags:        Liste de tags — le record doit avoir au moins un de ces tags.
-            batch_size:  Nombre de records par lot (pour info seulement).
 
         Returns:
             datasets.Dataset configuré pour un entraînement LLM.
@@ -301,19 +301,24 @@ class LoopReader:
                 "Installer HuggingFace datasets : pip install datasets"
             )
 
-        # Collect records into a list first — the generator captures self._decompressor
-        # which is not picklable, and HF datasets uses multiprocessing for the generator.
-        records = list(self.stream(
-            min_quality=min_quality,
-            max_quality=max_quality,
-            split=split,
-            language=language,
-            tags=tags,
-        ))
+        # True lazy generator: reads records on-demand from the .loop file.
+        # We capture self.path (picklable Path) rather than self._decompressor
+        # (unpicklable zstd decompressor object which multiprocessing can't serialize).
+        # Each call to stream() creates a fresh decompressor internally via
+        # _read_block_raw(), so this remains memory-efficient.
+        path = self.path
 
         def gen():
-            for record in records:
-                yield record
+            # Must re-instantiate reader here so the generator body is picklable
+            # (captures path string, not self with unpicklable decompressor).
+            reader = LoopReader(path)
+            yield from reader.stream(
+                min_quality=min_quality,
+                max_quality=max_quality,
+                split=split,
+                language=language,
+                tags=tags,
+            )
 
         return Dataset.from_generator(gen)
 
