@@ -217,6 +217,63 @@ class TestLoopWriter:
 # Tests Reader
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests Merge
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestLoopMerge:
+
+    def test_merge_two_files(self, tmp_path):
+        """LoopWriter.merge() تجمع deux fichiers .loop."""
+        from looplib import LoopWriter, LoopReader
+
+        records = [
+            {
+                "messages": [
+                    {"role": "user",      "content": f"Q{i}"},
+                    {"role": "assistant", "content": f"A{i}"},
+                ],
+                "quality": 0.7 + i * 0.03,
+                "split":   "train" if i < 8 else "val",
+            }
+            for i in range(10)
+        ]
+
+        p1 = tmp_path / "a.loop"
+        p2 = tmp_path / "b.loop"
+        pm = tmp_path / "merged.loop"
+
+        w1 = LoopWriter(p1, metadata={"name": "set_a"})
+        w2 = LoopWriter(p2, metadata={"name": "set_b"})
+        for r in records[:4]: w1.add(r)
+        for r in records[4:10]: w2.add(r)
+        w1.save()
+        w2.save()
+
+        result = LoopWriter.merge([p1, p2], pm, metadata={"name": "merged"})
+
+        reader = LoopReader(pm)
+        assert reader.count() == 10
+        meta = reader.metadata or {}
+        assert meta.get("name") == "merged"
+        assert set(meta.get("sources", [])) == {"set_a", "set_b"}
+        assert meta.get("splits", {}).get("train") == 8
+
+        all_recs = list(reader.stream())
+        assert len(all_recs) == 10
+        assert all_recs[0]["messages"][0]["content"] == "Q0"
+        assert all_recs[-1]["messages"][0]["content"] == "Q9"
+
+    def test_merge_validates_min_two_files(self, tmp_path):
+        p1 = tmp_path / "single.loop"
+        w = LoopWriter(p1)
+        w.add({"messages": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hi"}]})
+        w.save()
+
+        with pytest.raises(ValueError, match="au moins 2"):
+            LoopWriter.merge([p1], tmp_path / "out.loop")
+
+
 class TestLoopReader:
 
     def test_round_trip(self, tmp_loop):

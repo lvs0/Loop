@@ -390,3 +390,167 @@ class LoopWriter:
         meta.update(self.metadata)
 
         return meta
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Fusion & Append
+    # ──────────────────────────────────────────────────────────────────────────
+
+    @classmethod
+    def merge(cls, paths: List[Path], output_path: Path, metadata: Optional[Dict[str, Any]] = None) -> Path:
+        """Fusionne plusieurs fichiers .loop en un seul.
+
+        Les blocs de chaque fichier sont recompressés et réécrits dans
+        le fichier de sortie. Les métadonnées de chaque source sont
+        agrégées (``sources``).
+
+        Args:
+            paths: Liste des fichiers .loop à fusionner (dans l'ordre).
+            output_path: Chemin du fichier de sortie.
+            metadata: Métadonnées additionnelles (optionnel).
+
+        Returns:
+            Le ``output_path``.
+        """
+        if len(paths) < 2:
+            raise ValueError("Il faut au moins 2 fichiers à fusionner.")
+        for p in paths:
+            if not p.exists():
+                raise FileNotFoundError(p)
+
+        from .reader import LoopReader
+
+        meta: Dict[str, Any] = dict(metadata or {})
+        meta["name"] = meta.get("name", "merged")
+
+        writer = cls(output_path, metadata=meta)
+        sources: List[str] = []
+        total_tokens = 0
+        splits_count: Dict[int, int] = {0: 0, 1: 0, 2: 0}
+        quality_scores: List[float] = []
+
+        for p in paths:
+            reader = LoopReader(p)
+            h = reader._header
+            m = reader.metadata  # lire via la property (parse si nécessaire)
+            total_tokens += h.get("total_tokens_approx", 0)
+            src_name = (m or {}).get("name", str(p))
+            sources.append(src_name)
+
+            for rec in reader.stream():
+                q = rec.get("quality")
+                if q is not None:
+                    quality_scores.append(q)
+                s = rec.get("split", "train")
+                s_id = SPLIT_IDS.get(s, 0)
+                splits_count[s_id] = splits_count.get(s_id, 0) + 1
+                writer.add(rec)
+
+            if hasattr(reader, "close"):
+                reader.close()
+
+        writer.save()
+
+        # Réécrire les métadonnées avec les stats agrégées
+        _rewrite_metadata(output_path, {
+            "loop_format_version": "1.0",
+            "n_records": writer._n_records,
+            "n_blocks": len(writer._blocks),
+            "block_size": writer.block_size,
+            "compression": "zstd",
+            "schema": writer.SCHEMA,
+            "splits": {
+                "train": splits_count.get(0, 0),
+                "val": splits_count.get(1, 0),
+                "test": splits_count.get(2, 0),
+            },
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "sources": sorted(set(sources)),
+            "total_tokens_approx": total_tokens,
+            "quality_stats": (
+                {
+                    "mean": round(sum(quality_scores) / len(quality_scores), 4),
+                    "min": round(min(quality_scores), 4),
+                    "max": round(max(quality_scores), 4),
+                }
+                if quality_scores
+                else {}
+            ),
+            **meta,
+        })
+
+        logger.info(f"Merged {len(paths)} files → {output_path} ({writer._n_records} records)")
+        return output_path
+
+    def append(self, record: Dict[str, Any]) -> "LoopWriter":
+        """Ajoute un record à un fichier existant (mode append).
+
+        Après ``append()``, le fichier est relu en lecture seule via ``get_reader()``.
+        """
+        self._append_mode = True
+        return self.add(record)
+
+    def finalize_append(self) -> Path:
+        """Finalise le mode append."""
+        raise NotImplementedError(
+            "append() est un chemin de compatibilité. "
+            "Pour ajouter à un fichier existant, recarga-le et réécris-le avec add(). "
+            "Exemple : reader = LoopReader(existing.loop); writer = LoopWriter(new.loop); "
+            "writer.add_many(reader.stream()); writer.save()"
+        )
+
+    def get_reader(self) -> "LoopReader":
+        """Retourne un LoopReader sur le fichier en cours (mode append)."""
+        if not self._append_mode:
+            raise RuntimeError("get_reader() n'est disponible qu'après append().")
+        from .reader import LoopReader
+
+        return LoopReader(self.path)
+
+
+def _rewrite_metadata(path: Path, metadata: Dict[str, Any]) -> None:
+    """Réécrit les métadonnées d'un fichier .loop sans modifier les blocs compressés."""
+    with open(path, "rb+") as f:
+        header = f.read(HEADER_SIZE)
+        # Header format: <4sHHHHqqqqI16s
+        # bytes 12-19: n_records (q), bytes 20-27: n_blocks (q), bytes 28-35: metadata_offset (q)
+        n_records = int.from_bytes(header[12:20], "little")
+        n_blocks = int.from_bytes(header[20:28], "little")
+        index_offset = HEADER_SIZE  # toujours 64
+        index_size = n_blocks * INDEX_ENTRY_SIZE
+
+        # Lire l'index pour obtenir les positions des blocs
+        f.seek(index_offset)
+        index_data = f.read(index_size)
+
+        # Lire les blocs compressés en utilisant les offsets de l'index
+        blocks: List[bytes] = []
+        for bi in range(n_blocks):
+            entry = index_data[bi * INDEX_ENTRY_SIZE: (bi + 1) * INDEX_ENTRY_SIZE]
+            offset = int.from_bytes(entry[0:8], "little")
+            size = int.from_bytes(entry[8:12], "little")
+            f.seek(offset)
+            blocks.append(f.read(size))
+
+        # CRC sur les blocs compressés
+        crc_data = b"".join(blocks)
+        crc = _crc64(crc_data)
+
+        # Préparer les nouvelles métadonnées
+        meta_json = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
+        cctx = zstd.ZstdCompressor(level=ZSTD_LEVEL)
+        meta_bytes = cctx.compress(meta_json.encode("utf-8"))
+
+        # Réécrire header + index + blocs + métadonnées + footer
+        f.seek(0)
+        f.write(header)  # header inchangé
+        f.write(index_data)  # index recopié
+        for block in blocks:
+            f.write(block)  # blocs recopiés
+        f.write(meta_bytes)  # nouvelles métadonnées
+        footer = (
+            struct.pack("<I", len(meta_bytes)) +
+            struct.pack("<Q", crc) +
+            MAGIC_FOOTER
+        )
+        f.write(footer)
+        f.truncate()
