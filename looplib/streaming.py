@@ -361,6 +361,18 @@ class StreamingLoopWriter:
         meta.update(self.metadata)
         return meta
 
+    def __repr__(self) -> str:
+        """Représentation concise pour debugging."""
+        n_blocks_finalized = len(self._block_meta)
+        n_buffered = len(self._records)
+        finalized = " (finalized)" if self._temp_fd is None else ""
+        return (
+            f"<StreamingLoopWriter path='{self.path.name}'{finalized} "
+            f"records_added={self._n_records:,} "
+            f"blocks={n_blocks_finalized} "
+            f"buffered={n_buffered}>"
+        )
+
     def __enter__(self) -> "StreamingLoopWriter":
         return self
 

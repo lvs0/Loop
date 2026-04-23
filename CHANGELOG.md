@@ -12,11 +12,12 @@ All notable changes to the looplib project will be documented in this file.
   - `__contains__` — test d'appartenance d'un index (`idx in reader`)
   - `__getitem__` — accès direct par index (`reader[42]`)
   - `__iter__` — itération sur les records (`for rec in reader`)
+- `StreamingLoopWriter` now has `__repr__` for consistent debugging experience
 - GitHub Actions CI workflow (`.github/workflows/tests.yml`) with Python 3.10/3.11/3.12 test matrix and linting
 - `LoopReader.__getitem__` for random-access: `reader[i]` returns the record at index `i` without loading preceding blocks
 
 ### Fixed
-- Version bump: `__version__` in `__init__.py` corrected to `1.0.3` (was `1.0.1`)
+- Version bump: `__version__` in `__init__.py` and `__main__.py` corrected to `1.0.3` (was `1.0.1`)
 
 ## [1.0.3] - 2026-04-23
 
