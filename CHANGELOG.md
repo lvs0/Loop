@@ -7,23 +7,18 @@ All notable changes to the looplib project will be documented in this file.
 ### Added
 - `LoopWriter` now supports `with` statement (context manager protocol via `__enter__`/`__exit__`)
 - `LoopValidator` now supports `with` statement (context manager protocol via `__enter__`/`__exit__`)
-
-## [1.0.3] - 2026-04-23
+- `LoopReader` now supports Python dunder methods:
+  - `__len__` — nombre total de records (`len(reader)`)
+  - `__contains__` — test d'appartenance d'un index (`idx in reader`)
+  - `__getitem__` — accès direct par index (`reader[42]`)
+  - `__iter__` — itération sur les records (`for rec in reader`)
+- GitHub Actions CI workflow (`.github/workflows/tests.yml`) with Python 3.10/3.11/3.12 test matrix and linting
+- `LoopReader.__getitem__` for random-access: `reader[i]` returns the record at index `i` without loading preceding blocks
 
 ### Fixed
-- `to_huggingface()` now truly lazy: re-instantiates LoopReader inside generator
-  body so HF multiprocessing can serialize it (previously pre-loaded all records
-  into RAM via `list(self.stream(...))`, defeating the lazy design)
-- Removed unused `batch_size` parameter from `to_huggingface()`
-- `SequencePacker.efficiency()`: fixed mathematically incorrect `packed_gpu_usage`
-  formula that always returned ~100% regardless of actual packing quality.
-  Now correctly computes fill rate as `avg_tokens_in_packed_seq / max_seq_len * 100`.
-- `examples/basic_usage.py`: fix launch comment path.
+- Version bump: `__version__` in `__init__.py` corrected to `1.0.3` (was `1.0.1`)
 
-### Changed
-- Moved `examples/basic_usage.py` to dedicated `examples/` directory
-
-## [1.0.2] - 2026-04-23
+## [1.0.3] - 2026-04-23
 
 ### Fixed
 - `to_huggingface()` now truly lazy: re-instantiates LoopReader inside generator
@@ -71,5 +66,5 @@ All notable changes to the looplib project will be documented in this file.
 - `LoopValidator` for record validation
 - `LoopPatcher` for incremental dataset updates (.looppatch format)
 - Full CLI with commands: info, validate, convert, stats, pack, filter, count, merge, inspect, patch-create, patch-apply
-- Comprehensive test suite (55 tests)
+- Comprehensive test suite (57 tests → now 65 with dunder method tests)
 - SPEC.md with full binary format specification

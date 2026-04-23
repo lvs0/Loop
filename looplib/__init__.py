@@ -18,7 +18,7 @@ from looplib.validator import LoopValidator, ValidationError
 from looplib.packer import SequencePacker
 from looplib.patcher import LoopPatcher, PatchError
 
-__version__ = "1.0.1"
+__version__ = "1.0.3"
 __format_version__ = (1, 0)
 __all__ = [
     "LoopWriter",

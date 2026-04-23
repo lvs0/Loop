@@ -378,6 +378,71 @@ class TestLoopReader:
         assert isinstance(ds, Dataset)
         assert len(ds) == len(SAMPLE_RECORDS)
 
+    def test_dunder_len(self, tmp_loop):
+        reader = LoopReader(tmp_loop)
+        assert len(reader) == len(SAMPLE_RECORDS)
+
+    def test_dunder_contains_valid_index(self, tmp_loop):
+        reader = LoopReader(tmp_loop)
+        assert 0 in reader
+        assert len(reader) - 1 in reader
+
+    def test_dunder_contains_invalid_index(self, tmp_loop):
+        reader = LoopReader(tmp_loop)
+        assert -1 not in reader
+        assert len(reader) not in reader
+        assert 9999 not in reader
+
+    def test_dunder_getitem_valid(self, tmp_loop):
+        reader = LoopReader(tmp_loop)
+        record = reader[0]
+        assert "messages" in record
+        # Last record
+        last = reader[len(reader) - 1]
+        assert "messages" in last
+
+    def test_dunder_getitem_out_of_range(self, tmp_loop):
+        reader = LoopReader(tmp_loop)
+        with pytest.raises(IndexError, match="out of range"):
+            reader[len(reader)]
+        with pytest.raises(IndexError, match="out of range"):
+            reader[-1]
+
+    def test_dunder_iter(self, tmp_loop):
+        reader = LoopReader(tmp_loop)
+        # Iterating over reader yields record dicts (not indices)
+        records = list(reader)
+        assert len(records) == len(SAMPLE_RECORDS)
+        assert all(isinstance(r, dict) for r in records)
+        assert all("messages" in r for r in records)
+
+    def test_dunder_iter_matches_stream(self, tmp_loop):
+        reader = LoopReader(tmp_loop)
+        iter_records   = list(reader)
+        stream_records = list(reader.stream())
+        assert iter_records == stream_records
+
+    def test_getitem_random_access_all_records(self, tmp_path):
+        """Direct index access should return the same records as stream."""
+        path = tmp_path / "access.loop"
+        w    = LoopWriter(path, metadata={"name": "access_test", "category": "test", "language": "fr"})
+        w.add_many([
+            {
+                "messages": [
+                    {"role": "user",      "content": f"Q{i}"},
+                    {"role": "assistant", "content": f"A{i}"},
+                ],
+                "quality": i / 50,
+                "split":   "train" if i % 5 != 0 else "val",
+            }
+            for i in range(50)
+        ])
+        w.save()
+
+        reader = LoopReader(path)
+        for i in range(50):
+            assert reader[i]["messages"][0]["content"] == f"Q{i}"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tests SequencePacker

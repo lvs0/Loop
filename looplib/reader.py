@@ -74,6 +74,55 @@ class LoopReader:
             )
         return f"<LoopReader path='{self.path}' (uninitialized)>"
 
+    def __len__(self) -> int:
+        """Retourne le nombre total de records dans le fichier."""
+        return self._header["n_records"] if self._header else 0
+
+    def __contains__(self, record_or_idx) -> bool:
+        """Teste si un record ou index est présent dans le fichier.
+
+        Args:
+            record_or_idx: Un entier (index) ou un dict (record à chercher).
+
+        Returns:
+            True si l'index est dans les limites ou le record existe.
+        """
+        if isinstance(record_or_idx, int):
+            return 0 <= record_or_idx < len(self)
+        # For dict records we'd need to scan — not efficient, raise TypeError
+        raise TypeError(
+            f"__contains__ expects an int (record index), got {type(record_or_idx).__name__}"
+        )
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        """Accès direct à un record par son index (random access).
+
+        Args:
+            idx: Index du record (0 à n_records-1).
+
+        Returns:
+            Le record à cet index.
+
+        Raises:
+            IndexError: Si l'index est hors limites.
+        """
+        n = self._header["n_records"] if self._header else 0
+        if not (0 <= idx < n):
+            raise IndexError(f"Record index {idx} out of range (0–{n-1})")
+        block_idx = idx // self._header["block_size"]
+        offset_in_block = idx % self._header["block_size"]
+        block_records = self.read_block(block_idx)
+        return block_records[offset_in_block]
+
+    def __iter__(self) -> Iterator[Dict[str, Any]]:
+        """Itère sur les records du fichier (streaming, sans tout charger en RAM).
+
+        Équivalent à : for record in reader.stream()
+
+        Note : pour un accès par index, utilisez reader[i] directement.
+        """
+        yield from self.stream()
+
     # ──────────────────────────────────────────────────────────────────────────
     # API publique
     # ──────────────────────────────────────────────────────────────────────────
