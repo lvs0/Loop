@@ -1,7 +1,7 @@
 """
 examples/basic_usage.py — Démonstration complète de looplib
 
-Lance avec : python examples/basic_usage.py
+Lance avec : python looplib/basic_usage.py
 """
 
 import sys

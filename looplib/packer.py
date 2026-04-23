@@ -263,13 +263,12 @@ class SequencePacker:
         packed_seqs = total_tokens / self.max_seq_len
         naive_seqs  = n_records
 
-        # Naive: each conversation = 1 sequence → many sequences with lots of padding
-        # avg_tokens / max_seq_len tells us the average GPU utilization without packing
+        # Naive: each conversation = 1 full sequence — GPU mostly idle
         naive_gpu = (avg_tokens / self.max_seq_len) * 100
-        # Packed: sequences are nearly full → avg utilization per sequence ~100%
-        # We approximate this as: (avg_tokens / max_seq_len) clamped to near 100%
-        # Since packing fills sequences, GPU usage is ~100% when avg_tokens is reasonable
-        packed_gpu = min(99.9, (avg_tokens / self.max_seq_len) * 100 + (100 - (avg_tokens / self.max_seq_len * 100)))
+        # Packed: utilization of each packed sequence is
+        # (tokens_in_packed_seq / max_seq_len) * 100, which is
+        # (total_tokens / n_packed_seqs) / max_seq_len * 100
+        packed_gpu = min(99.9, (total_tokens / packed_seqs) / self.max_seq_len * 100) if packed_seqs > 0 else 0.0
 
         return {
             "n_records":        n_records,
