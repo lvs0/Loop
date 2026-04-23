@@ -1,5 +1,32 @@
 """Constantes du format .loop v1.0"""
 
+__all__ = [
+    "MAGIC_HEADER",
+    "MAGIC_FOOTER",
+    "MAGIC_BLOCK",
+    "HEADER_SIZE",
+    "INDEX_ENTRY_SIZE",
+    "FOOTER_SIZE",
+    "FORMAT_VERSION_MAJOR",
+    "FORMAT_VERSION_MINOR",
+    "FLAG_COMPRESSION_ZSTD",
+    "FLAG_HAS_PRETOKENIZED",
+    "FLAG_HAS_QUALITY_INDEX",
+    "FLAG_MULTI_SPLIT",
+    "SPLIT_TRAIN",
+    "SPLIT_VAL",
+    "SPLIT_TEST",
+    "SPLIT_ALL",
+    "SPLIT_NAMES",
+    "SPLIT_IDS",
+    "VALID_ROLES",
+    "MAX_RECORD_SIZE",
+    "MAX_BLOCK_SIZE",
+    "ZSTD_LEVEL",
+    "COMPRESSION_NONE",
+    "COMPRESSION_ZSTD",
+]
+
 # Magic bytes
 MAGIC_HEADER  = b"LOOP"           # début de fichier
 MAGIC_FOOTER  = b"POOL"           # fin de fichier (LOOP inversé)

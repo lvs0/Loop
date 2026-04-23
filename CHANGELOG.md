@@ -15,6 +15,9 @@ All notable changes to the looplib project will be documented in this file.
 - `StreamingLoopWriter` now has `__repr__` for consistent debugging experience
 - GitHub Actions CI workflow (`.github/workflows/tests.yml`) with Python 3.10/3.11/3.12 test matrix and linting
 - `LoopReader.__getitem__` for random-access: `reader[i]` returns the record at index `i` without loading preceding blocks
+- New CLI command: `loop diff <file_a> <file_b>` — compare two .loop files and show differences in records, blocks, size, quality stats, splits, and tags
+- `__all__` exports added to `constants.py` for cleaner module interface
+- CI workflow enhanced with mypy type checking (non-blocking)
 
 ### Fixed
 - Version bump: `__version__` in `__init__.py` and `__main__.py` corrected to `1.0.3` (was `1.0.1`)

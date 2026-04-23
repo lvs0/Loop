@@ -694,6 +694,76 @@ def cmd_patch_apply(args) -> None:
         sys.exit(1)
 
 
+def cmd_diff(args) -> None:
+    """Compare deux fichiers .loop et affiche les différences."""
+    from looplib.reader import LoopReader
+
+    reader_a = LoopReader(args.file_a)
+    reader_b = LoopReader(args.file_b)
+
+    info_a = reader_a.info()
+    info_b = reader_b.info()
+
+    print(f"\n{'─' * 50}")
+    print(f"  Diff : {args.file_a} vs {args.file_b}")
+    print(f"{'─' * 50}")
+
+    # Compare basic stats
+    fields = [
+        ("Records", "n_records", "{:,}"),
+        ("Blocs", "n_blocks", "{}"),
+        ("Taille (MB)", "file_size_mb", "{:.2f}"),
+        ("Tokens", "total_tokens", "{:,}"),
+    ]
+
+    for label, key, fmt in fields:
+        val_a = info_a.get(key, 0)
+        val_b = info_b.get(key, 0)
+        diff = val_b - val_a
+        sign = "+" if diff > 0 else ""
+        print(f"  {label:15} │ A: {fmt.format(val_a):>12} │ B: {fmt.format(val_b):>12} │ Δ: {sign}{diff:,}")
+
+    # Compare quality stats
+    qa = info_a.get("quality_stats", {})
+    qb = info_b.get("quality_stats", {})
+    if qa or qb:
+        print(f"\n  Qualité :")
+        for stat in ["mean", "min", "max"]:
+            va = qa.get(stat, "-")
+            vb = qb.get(stat, "-")
+            print(f"    {stat:8} │ A: {va:>6} │ B: {vb:>6}")
+
+    # Compare splits
+    sa = info_a.get("splits", {})
+    sb = info_b.get("splits", {})
+    if sa or sb:
+        print(f"\n  Splits :")
+        for split in ["train", "val", "test"]:
+            va = sa.get(split, 0)
+            vb = sb.get(split, 0)
+            diff = vb - va
+            sign = "+" if diff > 0 else ""
+            print(f"    {split:8} │ A: {va:>6,} │ B: {vb:>6,} │ Δ: {sign}{diff:,}")
+
+    # Compare tags
+    ta = set(info_a.get("tags", []))
+    tb = set(info_b.get("tags", []))
+    common = ta & tb
+    only_a = ta - tb
+    only_b = tb - ta
+
+    if only_a or only_b:
+        print(f"\n  Tags :")
+        if only_a:
+            print(f"    Uniquement A : {', '.join(sorted(only_a)[:10])}")
+        if only_b:
+            print(f"    Uniquement B : {', '.join(sorted(only_b)[:10])}")
+        if common:
+            print(f"    Communs      : {len(common)} tags")
+
+    print(f"{'─' * 50}\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="loop",
@@ -776,6 +846,11 @@ def main() -> None:
     p_patch_apply.add_argument("patch", help="Fichier patch (.looppatch)")
     p_patch_apply.add_argument("-o", "--output", required=True, help="Fichier .loop fusionné de sortie")
 
+    # loop diff
+    p_diff = subparsers.add_parser("diff", help="Comparer deux fichiers .loop")
+    p_diff.add_argument("file_a", help="Premier fichier .loop")
+    p_diff.add_argument("file_b", help="Deuxième fichier .loop")
+
     args = parser.parse_args()
 
     commands = {
@@ -790,6 +865,7 @@ def main() -> None:
         "inspect":  cmd_inspect,
         "patch-create": cmd_patch_create,
         "patch-apply":  cmd_patch_apply,
+        "diff":     cmd_diff,
     }
     commands[args.command](args)
 
