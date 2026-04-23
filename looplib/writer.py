@@ -531,8 +531,13 @@ def _rewrite_metadata(path: Path, metadata: Dict[str, Any]) -> None:
             f.seek(offset)
             blocks.append(f.read(size))
 
-        # CRC sur les blocs compressés
-        crc_data = b"".join(blocks)
+        # CRC sur les blocs décompressés (conformément au SPEC.md)
+        decompressor = zstd.ZstdDecompressor()
+        crc_data_parts = []
+        for block in blocks:
+            decompressed = decompressor.decompress(block)
+            crc_data_parts.append(decompressed)
+        crc_data = b"".join(crc_data_parts)
         crc = _crc64(crc_data)
 
         # Préparer les nouvelles métadonnées

@@ -369,14 +369,17 @@ class TestLoopReader:
 
     def test_to_huggingface_uses_generator(self, tmp_loop):
         pytest.importorskip("datasets")
-        from datasets import Dataset
+        from datasets import IterableDataset
         from looplib.reader import LoopReader
 
         reader = LoopReader(tmp_loop)
         ds = reader.to_huggingface()
 
-        assert isinstance(ds, Dataset)
-        assert len(ds) == len(SAMPLE_RECORDS)
+        # to_huggingface now returns an IterableDataset for true streaming
+        assert isinstance(ds, IterableDataset)
+        # IterableDataset is lazy — collect to list to verify record count
+        records = list(ds)
+        assert len(records) == len(SAMPLE_RECORDS)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

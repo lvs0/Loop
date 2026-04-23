@@ -593,6 +593,38 @@ def cmd_merge(args) -> None:
     print(f"  ✓ Fichier  : {output_path} ({size / 1024:.1f} KB)\n")
 
 
+def cmd_deduplicate(args) -> None:
+    """Dédoublonne un fichier .loop et écrit la version nettoyée."""
+    from looplib.reader import LoopReader
+
+    reader = LoopReader(args.file)
+
+    result = reader.deduplicate(
+        output_path=args.output,
+        min_quality=args.min_quality,
+        split=args.split,
+        language=args.language,
+    )
+
+    total     = result["total"]
+    unique    = result["unique"]
+    duplicates = result["duplicates"]
+
+    print(f"\n  Dédoublonnage : {args.file}")
+    print(f"  ─────────────────────────────────────────")
+    print(f"    Total       : {total:,}")
+    print(f"    Uniques     : {unique:,}")
+    print(f"    Doublons    : {duplicates:,}")
+    if total > 0:
+        print(f"    Réduction   : {duplicates/total*100:.1f}%")
+
+    if args.output:
+        import os
+        size_kb = os.path.getsize(args.output) / 1024
+        print(f"\n  ✓ Fichier dédoublonné : {args.output} ({size_kb:.1f} KB)")
+    print()
+
+
 def cmd_inspect(args) -> None:
     """Inspecte un record spécifique ou un échantillon aléatoire."""
     from looplib.reader import LoopReader
@@ -727,6 +759,9 @@ def main() -> None:
     p_stats.add_argument("file")
     p_stats.add_argument("--plot", "-p", action="store_true", help="Afficher un histogramme ASCII de la distribution de qualité")
     p_stats.add_argument("--max-len", "-m", type=int, default=2048, help="Longueur max de séquence pour l'estimation d'efficacité (défaut: 2048)")
+    p_stats.add_argument("--min-quality", "-q", type=float, default=None, help="Score qualité minimum")
+    p_stats.add_argument("--split", "-s", choices=["train", "val", "test"], help="Filtrer par split")
+    p_stats.add_argument("--language", "-l", help="Code langue ISO 639-1 (ex: fr, en)")
 
     # loop pack
     p_pack = subparsers.add_parser("pack", help="Pack records en séquences + stats d'efficacité")
@@ -776,6 +811,14 @@ def main() -> None:
     p_patch_apply.add_argument("patch", help="Fichier patch (.looppatch)")
     p_patch_apply.add_argument("-o", "--output", required=True, help="Fichier .loop fusionné de sortie")
 
+    # loop deduplicate
+    p_dedup = subparsers.add_parser("deduplicate", help="Dédoublonne un fichier .loop par contenu des messages")
+    p_dedup.add_argument("file", help="Fichier .loop à dédoublonner")
+    p_dedup.add_argument("-o", "--output", help="Fichier de sortie (.loop). Si absent, affiche uniquement les stats.")
+    p_dedup.add_argument("--min-quality", "-q", type=float, default=None, help="Score qualité minimum")
+    p_dedup.add_argument("--split", "-s", choices=["train", "val", "test"], help="Filtrer par split")
+    p_dedup.add_argument("--language", "-l", help="Code langue ISO 639-1 (ex: fr, en)")
+
     args = parser.parse_args()
 
     commands = {
@@ -790,6 +833,7 @@ def main() -> None:
         "inspect":  cmd_inspect,
         "patch-create": cmd_patch_create,
         "patch-apply":  cmd_patch_apply,
+        "deduplicate": cmd_deduplicate,
     }
     commands[args.command](args)
 
