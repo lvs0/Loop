@@ -5,8 +5,17 @@ All notable changes to the looplib project will be documented in this file.
 ## [1.0.3] - 2026-04-23
 
 ### Fixed
-- `SequencePacker.efficiency()`: the `packed_gpu_usage` formula was mathematically incorrect — it always returned ~100% regardless of actual packing quality (formula simplified to `100 - naive_gpu + naive_gpu = 100`). Now correctly computes `avg_tokens_in_packed_seq / max_seq_len * 100`, which properly reflects fill rate (e.g. 46.9% when 60 tokens pack into one 128-token seq vs 99.9% old value).
-- `looplib/basic_usage.py`: fix launch comment path (was `python examples/basic_usage.py`, corrected to `python looplib/basic_usage.py` since examples/ is not a top-level directory).
+- `to_huggingface()` now truly lazy: re-instantiates LoopReader inside generator
+  body so HF multiprocessing can serialize it (previously pre-loaded all records
+  into RAM via `list(self.stream(...))`, defeating the lazy design)
+- Removed unused `batch_size` parameter from `to_huggingface()`
+- `SequencePacker.efficiency()`: fixed mathematically incorrect `packed_gpu_usage`
+  formula that always returned ~100% regardless of actual packing quality.
+  Now correctly computes fill rate as `avg_tokens_in_packed_seq / max_seq_len * 100`.
+- `examples/basic_usage.py`: fix launch comment path.
+
+### Changed
+- Moved `examples/basic_usage.py` to dedicated `examples/` directory
 
 ## [1.0.2] - 2026-04-22
 
