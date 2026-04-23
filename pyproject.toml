@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "looplib"
-version = "1.0.1"
+version = "1.0.3"
 description = "Native LLM dataset format — conversation-native, compressed, streamable"
 readme = "README.md"
 license = { text = "MIT" }
