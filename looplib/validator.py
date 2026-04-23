@@ -102,3 +102,9 @@ class LoopValidator:
             for tag in tags:
                 if not isinstance(tag, str):
                     raise ValidationError(f"Chaque tag doit être une chaîne, reçu : {type(tag).__name__}")
+
+    def __enter__(self) -> "LoopValidator":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        pass

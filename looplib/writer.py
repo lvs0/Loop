@@ -506,6 +506,14 @@ class LoopWriter:
 
         return LoopReader(self.path)
 
+    def __enter__(self) -> "LoopWriter":
+        """Context manager entry —returns self for use with 'with' statement."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit — no cleanup needed since save() handles everything."""
+        pass
+
 
 def _rewrite_metadata(path: Path, metadata: Dict[str, Any]) -> None:
     """Réécrit les métadonnées d'un fichier .loop sans modifier les blocs compressés."""
