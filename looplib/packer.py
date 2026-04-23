@@ -105,7 +105,6 @@ class SequencePacker:
 
             # Position IDs : repartent de 0 pour chaque nouvelle conversation
             # (important pour RoPE — les modèles récents utilisent des position IDs relatifs)
-            pos_offset = 0
             current_ids      += ids
             current_labels   += labels
             current_pos_ids  += list(range(len(ids)))  # 0, 1, 2, ... pour cette convo
