@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import json
 import struct
-import hashlib
 import logging
 import time
 from pathlib import Path
@@ -43,31 +42,9 @@ from looplib.constants import (
     MAX_RECORD_SIZE, MAX_BLOCK_SIZE, ZSTD_LEVEL,
 )
 from looplib.validator import LoopValidator, ValidationError
+from looplib.utils import crc64, schema_hash
 
 logger = logging.getLogger(__name__)
-
-
-def _crc64(data: bytes) -> int:
-    """CRC64/ECMA-182 via table polynomiale."""
-    poly  = 0xC96C5795D7870F42
-    table = []
-    for i in range(256):
-        crc = i
-        for _ in range(8):
-            crc = (crc >> 1) ^ (poly if crc & 1 else 0)
-        table.append(crc)
-
-    crc = 0xFFFFFFFFFFFFFFFF
-    for byte in data:
-        crc = table[(crc ^ byte) & 0xFF] ^ (crc >> 8)
-    return crc ^ 0xFFFFFFFFFFFFFFFF
-
-
-def _schema_hash(schema: dict) -> int:
-    """Hash MD5 tronqué à 4 bytes du schéma pour détection d'incompatibilité."""
-    raw  = json.dumps(schema, sort_keys=True).encode("utf-8")
-    md5  = hashlib.md5(raw).digest()
-    return struct.unpack("<I", md5[:4])[0]
 
 
 class LoopWriter:
@@ -203,7 +180,7 @@ class LoopWriter:
             raise ValueError("Impossible de sauvegarder un .loop vide (0 records).")
 
         # Calcul du CRC64 sur tous les blocs décompressés accumulés
-        crc = _crc64(self._crc_data)
+        crc = crc64(self._crc_data)
 
         # Préparer les métadonnées finales
         full_metadata = self._build_metadata()
@@ -245,7 +222,7 @@ class LoopWriter:
                 len(self._blocks),
                 metadata_offset,
                 int(time.time()),
-                _schema_hash(self.SCHEMA),
+                schema_hash(self.SCHEMA),
                 b"\x00" * 16,  # reserved
             )
             assert len(header) == HEADER_SIZE, f"Header size mismatch: {len(header)}"
@@ -541,7 +518,7 @@ def _rewrite_metadata(path: Path, metadata: Dict[str, Any]) -> None:
 
         # CRC sur les blocs compressés
         crc_data = b"".join(blocks)
-        crc = _crc64(crc_data)
+        crc = crc64(crc_data)
 
         # Préparer les nouvelles métadonnées
         meta_json = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))

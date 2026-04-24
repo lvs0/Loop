@@ -17,8 +17,9 @@ from looplib.reader import LoopReader
 from looplib.validator import LoopValidator, ValidationError
 from looplib.packer import SequencePacker
 from looplib.patcher import LoopPatcher, PatchError
+from looplib.utils import crc64, schema_hash, format_bytes
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 __format_version__ = (1, 0)
 __all__ = [
     "LoopWriter",
@@ -29,4 +30,7 @@ __all__ = [
     "LoopPatcher",
     "ValidationError",
     "PatchError",
+    "crc64",
+    "schema_hash",
+    "format_bytes",
 ]

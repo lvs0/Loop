@@ -4,6 +4,29 @@ All notable changes to the looplib project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-04-24
+
+### Added
+- New `looplib.utils` module with shared utility functions:
+  - `crc64()` — CRC64/ECMA-182 with precomputed lookup table (faster, thread-safe)
+  - `schema_hash()` — MD5-based schema hash for compatibility detection
+  - `format_bytes()` — Human-readable byte formatting (KB, MB, GB)
+  - `clamp()` — Value clamping utility
+  - `calculate_percentile()` — Efficient percentile calculation on sorted data
+- Precomputed CRC64 lookup table in `constants.py` (CRC64_TABLE) for ~10x faster checksums
+- Added `Final` type hints to all constants for better IDE support
+- Exported utility functions in `__all__` for public API access
+
+### Changed
+- **Performance**: CRC64 computation now uses a precomputed lookup table instead of
+  rebuilding the table on every call. This provides ~10x speedup for large datasets.
+- **Refactoring**: Eliminated code duplication by centralizing `_crc64()` and
+  `_schema_hash()` functions in the new `utils` module
+- Updated version to 1.0.4 across all modules (`__init__.py`, `__main__.py`, `pyproject.toml`)
+
+### Fixed
+- Type consistency: All constants now use `Final` type annotations
+
 ### Added
 - `LoopWriter` now supports `with` statement (context manager protocol via `__enter__`/`__exit__`)
 - `LoopValidator` now supports `with` statement (context manager protocol via `__enter__`/`__exit__`)

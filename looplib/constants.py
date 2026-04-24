@@ -1,5 +1,7 @@
 """Constantes du format .loop v1.0"""
 
+from typing import Final
+
 __all__ = [
     "MAGIC_HEADER",
     "MAGIC_FOOTER",
@@ -25,6 +27,8 @@ __all__ = [
     "ZSTD_LEVEL",
     "COMPRESSION_NONE",
     "COMPRESSION_ZSTD",
+    "CRC64_POLYNOMIAL",
+    "CRC64_TABLE",
 ]
 
 # Magic bytes
@@ -65,5 +69,22 @@ MAX_BLOCK_SIZE    = 512          # records par bloc par défaut
 ZSTD_LEVEL        = 9            # niveau de compression (1-22)
 
 # Compression
-COMPRESSION_NONE = 0
-COMPRESSION_ZSTD = 1
+COMPRESSION_NONE: Final[int] = 0
+COMPRESSION_ZSTD: Final[int] = 1
+
+# CRC64 constants for efficient checksum computation
+CRC64_POLYNOMIAL: Final[int] = 0xC96C5795D7870F42
+
+
+def _build_crc64_table() -> list[int]:
+    """Build CRC64 lookup table once at module load time."""
+    table = []
+    for i in range(256):
+        crc = i
+        for _ in range(8):
+            crc = (crc >> 1) ^ (CRC64_POLYNOMIAL if crc & 1 else 0)
+        table.append(crc)
+    return table
+
+
+CRC64_TABLE: Final[list[int]] = _build_crc64_table()

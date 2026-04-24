@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import struct
-import hashlib
 import logging
 import time
 import tempfile
@@ -37,31 +36,9 @@ from looplib.constants import (
     MAX_RECORD_SIZE, MAX_BLOCK_SIZE, ZSTD_LEVEL,
 )
 from looplib.validator import LoopValidator, ValidationError
+from looplib.utils import crc64, schema_hash
 
 logger = logging.getLogger(__name__)
-
-
-def _crc64(data: bytes) -> int:
-    """CRC64/ECMA-182 via table polynomiale."""
-    poly = 0xC96C5795D7870F42
-    table = []
-    for i in range(256):
-        crc = i
-        for _ in range(8):
-            crc = (crc >> 1) ^ (poly if crc & 1 else 0)
-        table.append(crc)
-
-    crc = 0xFFFFFFFFFFFFFFFF
-    for byte in data:
-        crc = table[(crc ^ byte) & 0xFF] ^ (crc >> 8)
-    return crc ^ 0xFFFFFFFFFFFFFFFF
-
-
-def _schema_hash(schema: dict) -> int:
-    """Hash MD5 tronqué à 4 bytes du schéma."""
-    raw = json.dumps(schema, sort_keys=True).encode("utf-8")
-    md5 = hashlib.md5(raw).digest()
-    return struct.unpack("<I", md5[:4])[0]
 
 
 class StreamingLoopWriter:
@@ -232,7 +209,7 @@ class StreamingLoopWriter:
         self._temp_fd.close()
 
         # Calculate CRC
-        crc = _crc64(self._crc_data)
+        crc = crc64(self._crc_data)
 
         # Build metadata
         full_metadata = self._build_metadata()
@@ -269,7 +246,7 @@ class StreamingLoopWriter:
                 len(self._block_meta),
                 metadata_offset,
                 int(time.time()),
-                _schema_hash(self.SCHEMA),
+                schema_hash(self.SCHEMA),
                 b"\x00" * 16,
             )
             f.write(header)

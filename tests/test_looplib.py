@@ -894,3 +894,82 @@ class TestIntegrity:
 
         count = sum(1 for _ in reader.stream())
         assert count == n
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tests Utils
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestUtils:
+    """Tests for the utils module."""
+
+    def test_crc64_consistency(self):
+        """CRC64 should produce consistent results."""
+        from looplib.utils import crc64
+        data = b"hello world"
+        result1 = crc64(data)
+        result2 = crc64(data)
+        assert result1 == result2
+        assert isinstance(result1, int)
+        assert result1 > 0
+
+    def test_crc64_different_data(self):
+        """Different data should produce different CRCs."""
+        from looplib.utils import crc64
+        crc1 = crc64(b"hello")
+        crc2 = crc64(b"world")
+        assert crc1 != crc2
+
+    def test_schema_hash_consistency(self):
+        """Schema hash should be consistent for same schema."""
+        from looplib.utils import schema_hash
+        schema = {"roles": ["user", "assistant"], "version": 1}
+        hash1 = schema_hash(schema)
+        hash2 = schema_hash(schema)
+        assert hash1 == hash2
+        assert isinstance(hash1, int)
+
+    def test_schema_hash_order_independence(self):
+        """Schema hash should be independent of key order."""
+        from looplib.utils import schema_hash
+        schema1 = {"a": 1, "b": 2}
+        schema2 = {"b": 2, "a": 1}
+        assert schema_hash(schema1) == schema_hash(schema2)
+
+    def test_format_bytes(self):
+        """Test byte formatting."""
+        from looplib.utils import format_bytes
+        assert format_bytes(512) == "512 B"
+        assert format_bytes(1536) == "1.5 KB"
+        assert "MB" in format_bytes(2 * 1024 * 1024)
+        assert "GB" in format_bytes(2 * 1024 * 1024 * 1024)
+
+    def test_clamp(self):
+        """Test value clamping."""
+        from looplib.utils import clamp
+        assert clamp(5, 0, 10) == 5
+        assert clamp(-5, 0, 10) == 0
+        assert clamp(15, 0, 10) == 10
+        assert clamp(0.5, 0.0, 1.0) == 0.5
+
+    def test_calculate_percentile(self):
+        """Test percentile calculation."""
+        from looplib.utils import calculate_percentile
+        data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        assert calculate_percentile(data, 0.0) == 1
+        # For n=10, index=int(10*0.5)=5, which is the 6th element (0-indexed)
+        assert calculate_percentile(data, 0.5) == 6
+        assert calculate_percentile(data, 1.0) == 10
+        assert calculate_percentile([], 0.5) == 0.0
+
+    def test_crc64_precomputed_table(self):
+        """Verify CRC64 uses precomputed table for performance."""
+        from looplib.constants import CRC64_TABLE, CRC64_POLYNOMIAL
+        assert len(CRC64_TABLE) == 256
+        # Verify table is correctly computed
+        poly = CRC64_POLYNOMIAL
+        for i, table_val in enumerate(CRC64_TABLE):
+            crc = i
+            for _ in range(8):
+                crc = (crc >> 1) ^ (poly if crc & 1 else 0)
+            assert table_val == crc

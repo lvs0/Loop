@@ -34,6 +34,7 @@ from looplib.constants import (
 from looplib.reader import LoopReader
 from looplib.writer import LoopWriter
 from looplib.validator import LoopValidator, ValidationError
+from looplib.utils import crc64
 
 logger = logging.getLogger(__name__)
 
@@ -43,22 +44,6 @@ MAGIC_PATCH_FOOTER = b"HCTP"  # PTCH inversé
 
 PATCH_HEADER_SIZE = 32
 PATCH_FOOTER_SIZE = 8
-
-
-def _crc64(data: bytes) -> int:
-    """CRC64/ECMA-182 via table polynomiale."""
-    poly = 0xC96C5795D7870F42
-    table = []
-    for i in range(256):
-        crc = i
-        for _ in range(8):
-            crc = (crc >> 1) ^ (poly if crc & 1 else 0)
-        table.append(crc)
-
-    crc = 0xFFFFFFFFFFFFFFFF
-    for byte in data:
-        crc = table[(crc ^ byte) & 0xFF] ^ (crc >> 8)
-    return crc ^ 0xFFFFFFFFFFFFFFFF
 
 
 class PatchError(Exception):
@@ -282,7 +267,7 @@ class LoopPatcher:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Calculer le CRC des nouveaux blocs
-        new_crc = _crc64(crc_data)
+        new_crc = crc64(crc_data)
         
         with open(output_path, "wb") as f:
             # Header (32 bytes)
