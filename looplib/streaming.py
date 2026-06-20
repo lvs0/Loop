@@ -7,36 +7,45 @@ de taille arbitraire sans épuiser la RAM.
 
 Exemple :
     writer = StreamingLoopWriter("huge_dataset.loop", metadata={...})
-    
+
     for record in huge_iterator:
         writer.add(record)
-    
+
     writer.finalize()  # Écrit l'index, les métadonnées et le footer
 """
 
 from __future__ import annotations
 
 import json
-import struct
 import logging
-import time
-import tempfile
 import os
+import struct
+import tempfile
+import time
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, BinaryIO
+from typing import Any, BinaryIO, Dict, List, Optional, Union
 
 import zstandard as zstd
 
 from looplib.constants import (
-    MAGIC_HEADER, MAGIC_FOOTER, MAGIC_BLOCK,
-    HEADER_SIZE, INDEX_ENTRY_SIZE, FOOTER_SIZE,
-    FORMAT_VERSION_MAJOR, FORMAT_VERSION_MINOR,
-    FLAG_COMPRESSION_ZSTD, FLAG_MULTI_SPLIT,
-    SPLIT_IDS, SPLIT_ALL,
-    MAX_RECORD_SIZE, MAX_BLOCK_SIZE, ZSTD_LEVEL,
+    FLAG_COMPRESSION_ZSTD,
+    FLAG_MULTI_SPLIT,
+    FOOTER_SIZE,
+    FORMAT_VERSION_MAJOR,
+    FORMAT_VERSION_MINOR,
+    HEADER_SIZE,
+    INDEX_ENTRY_SIZE,
+    MAGIC_BLOCK,
+    MAGIC_FOOTER,
+    MAGIC_HEADER,
+    MAX_BLOCK_SIZE,
+    MAX_RECORD_SIZE,
+    SPLIT_ALL,
+    SPLIT_IDS,
+    ZSTD_LEVEL,
 )
-from looplib.validator import LoopValidator, ValidationError
 from looplib.utils import crc64, schema_hash
+from looplib.validator import LoopValidator, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +53,10 @@ logger = logging.getLogger(__name__)
 class StreamingLoopWriter:
     """
     Écrit un fichier .loop en mode streaming — pas de buffer mémoire illimité.
-    
+
     Les blocs sont écrits immédiatement sur disque (dans un fichier temporaire),
     et l'index est reconstruit à la finalisation.
-    
+
     Args:
         path: Chemin du fichier .loop final.
         metadata: Métadonnées du dataset.
@@ -82,7 +91,7 @@ class StreamingLoopWriter:
 
         # Current block buffer (small, flushed regularly)
         self._records: List[Dict] = []
-        
+
         # Block metadata for index reconstruction
         self._block_meta: List[Dict] = []
         self._crc_data = b""
@@ -101,11 +110,8 @@ class StreamingLoopWriter:
     def _init_temp_file(self) -> None:
         """Crée le fichier temporaire pour les blocs de données."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, self._temp_path = tempfile.mkstemp(
-            suffix=".loop.tmp", 
-            prefix="loop_stream_",
-            dir=self.path.parent
-        )
+        fd, temp_path = tempfile.mkstemp(suffix=".loop", prefix="loop_tmp_", dir=str(self.path.parent))
+        self._temp_path = Path(temp_path)
         self._temp_fd = os.fdopen(fd, "wb")
         logger.debug(f"Temp file: {self._temp_path}")
 
@@ -151,7 +157,7 @@ class StreamingLoopWriter:
         block_idx = len(self._block_meta)
 
         # Determine dominant split
-        split_counts = {}
+        split_counts: dict[int, int] = {}
         for r in self._records:
             s = SPLIT_IDS.get(r.get("split", "train"), 0)
             split_counts[s] = split_counts.get(s, 0) + 1
@@ -160,9 +166,13 @@ class StreamingLoopWriter:
         # Serialize records
         raw_parts = []
         for record in self._records:
-            record_bytes = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            record_bytes = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            )
             if len(record_bytes) > MAX_RECORD_SIZE:
-                raise ValueError(f"Record trop grand : {len(record_bytes)} bytes > {MAX_RECORD_SIZE} max")
+                raise ValueError(
+                    f"Record trop grand : {len(record_bytes)} bytes > {MAX_RECORD_SIZE} max"
+                )
             raw_parts.append(struct.pack("<I", len(record_bytes)))
             raw_parts.append(record_bytes)
 
@@ -173,25 +183,27 @@ class StreamingLoopWriter:
         self._crc_data += uncompressed
 
         compressed = self._compressor.compress(uncompressed)
-        
+
         # Write to temp file and store metadata
         block_offset = self._temp_fd.tell()
         self._temp_fd.write(compressed)
-        
-        self._block_meta.append({
-            "offset": block_offset,
-            "compressed_size": len(compressed),
-            "uncompressed_size": len(uncompressed),
-            "n_records": len(self._records),
-            "split_id": dominant_split,
-        })
+
+        self._block_meta.append(
+            {
+                "offset": block_offset,
+                "compressed_size": len(compressed),
+                "uncompressed_size": len(uncompressed),
+                "n_records": len(self._records),
+                "split_id": dominant_split,
+            }
+        )
 
         self._records = []
 
     def finalize(self) -> int:
         """
         Finalise le fichier .loop — écrit l'index, métadonnées et footer.
-        
+
         Returns:
             Taille du fichier final en bytes.
         """
@@ -254,12 +266,12 @@ class StreamingLoopWriter:
             # Index
             for bm in self._block_meta:
                 entry = (
-                    struct.pack("<Q", bm["final_offset"]) +
-                    struct.pack("<I", bm["compressed_size"]) +
-                    struct.pack("<I", bm["uncompressed_size"]) +
-                    struct.pack("<I", bm["n_records"]) +
-                    struct.pack("<H", bm["split_id"]) +
-                    struct.pack("<H", 0)
+                    struct.pack("<Q", bm["final_offset"])
+                    + struct.pack("<I", bm["compressed_size"])
+                    + struct.pack("<I", bm["uncompressed_size"])
+                    + struct.pack("<I", bm["n_records"])
+                    + struct.pack("<H", bm["split_id"])
+                    + struct.pack("<H", 0)
                 )
                 f.write(entry)
 
@@ -275,11 +287,7 @@ class StreamingLoopWriter:
             f.write(meta_bytes)
 
             # Footer
-            footer = (
-                struct.pack("<I", len(meta_bytes)) +
-                struct.pack("<Q", crc) +
-                MAGIC_FOOTER
-            )
+            footer = struct.pack("<I", len(meta_bytes)) + struct.pack("<Q", crc) + MAGIC_FOOTER
             f.write(footer)
 
         # Cleanup temp file
