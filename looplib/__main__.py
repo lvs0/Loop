@@ -11,19 +11,19 @@ Format natif pour le fine-tuning de LLMs :
   - Self-describing, intégrité CRC64
 """
 
-from looplib.writer import LoopWriter
-from looplib.streaming import StreamingLoopWriter
-from looplib.reader import LoopReader
-from looplib.validator import LoopValidator, ValidationError
 from looplib.packer import SequencePacker
 from looplib.patcher import LoopPatcher, PatchError
-from looplib.utils import crc64, schema_hash, format_bytes
+from looplib.reader import LoopReader
+from looplib.streaming import StreamingLoopWriter
+from looplib.utils import crc64, format_bytes, schema_hash
+from looplib.validator import LoopValidator, ValidationError
+from looplib.writer import LoopWriter
 
 __version__ = "1.0.4"
 __format_version__ = (1, 0)
 __all__ = [
     "LoopWriter",
-    "StreamingLoopWriter", 
+    "StreamingLoopWriter",
     "LoopReader",
     "LoopValidator",
     "SequencePacker",
@@ -39,6 +39,7 @@ __all__ = [
 def main():
     """Entry point for python -m looplib"""
     from looplib.cli import main as cli_main
+
     cli_main()
 
 

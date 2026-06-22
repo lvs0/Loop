@@ -15,20 +15,21 @@ Usage :
 
 from __future__ import annotations
 
-import sys
-import json
-import time
-import struct
-import logging
 import argparse
+import json
+import logging
+import struct
+import sys
+import time
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Iterator
+from typing import Any, Dict, Iterator, List, Optional
 
-from looplib import __version__, __format_version__
+from looplib import __format_version__, __version__
 
 try:
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
     from rich.console import Console
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+
     RICH_AVAILABLE = True
     console = Console()
 except ImportError:
@@ -60,20 +61,25 @@ def _progress_context(desc: str, total: Optional[int] = None):
         class DummyProgress:
             def __enter__(self):
                 return self
+
             def __exit__(self, *args):
                 pass
+
             def add_task(self, *args, **kwargs):
                 return 0
+
             def update(self, *args, **kwargs):
                 pass
+
         return DummyProgress()
 
 
 def cmd_info(args) -> None:
     """Affiche les informations d'un fichier .loop."""
     from looplib.reader import LoopReader
+
     reader = LoopReader(args.file)
-    info   = reader.info()
+    info = reader.info()
 
     print(f"\n{'─' * 50}")
     print(f"  {args.file}")
@@ -115,13 +121,13 @@ def cmd_info(args) -> None:
 
 def cmd_validate(args) -> None:
     """Vérifie l'intégrité d'un fichier .loop."""
-    from looplib.reader import LoopReader, LoopParseError
-    from looplib.constants import MAGIC_HEADER, MAGIC_FOOTER, FOOTER_SIZE
+    from looplib.constants import FOOTER_SIZE, MAGIC_FOOTER, MAGIC_HEADER
+    from looplib.reader import LoopParseError, LoopReader
 
     path = Path(args.file)
     print(f"\nValidation : {path}")
 
-    errors   = []
+    errors = []
     warnings = []
 
     # 1. Vérifier magic bytes
@@ -146,7 +152,9 @@ def cmd_validate(args) -> None:
     # 2. Parser header + index
     try:
         reader = LoopReader(path)
-        print(f"  ✓ Header/Index parsé ({reader._header['n_records']:,} records, {reader._header['n_blocks']} blocs)")
+        print(
+            f"  ✓ Header/Index parsé ({reader._header['n_records']:,} records, {reader._header['n_blocks']} blocs)"
+        )
     except LoopParseError as e:
         errors.append(f"Header/Index invalide : {e}")
         _print_result(errors, warnings)
@@ -156,7 +164,7 @@ def cmd_validate(args) -> None:
     total_records = 0
     n_blocks = reader._header["n_blocks"]
     start = time.time()
-    
+
     with _progress_context("Validation des blocs", total=n_blocks) as progress:
         task = progress.add_task("Validation", total=n_blocks)
         try:
@@ -170,11 +178,9 @@ def cmd_validate(args) -> None:
             errors.append(f"Erreur de lecture des blocs : {e}")
 
     # 4. Cohérence count
-    declared  = reader._header["n_records"]
+    declared = reader._header["n_records"]
     if total_records != declared:
-        warnings.append(
-            f"Incohérence : header déclare {declared} records, {total_records} lus"
-        )
+        warnings.append(f"Incohérence : header déclare {declared} records, {total_records} lus")
 
     # 5. Métadonnées
     try:
@@ -201,10 +207,10 @@ def _print_result(errors, warnings) -> None:
 
 def cmd_convert(args) -> None:
     """Convertit un fichier JSONL vers .loop."""
-    from looplib.writer import LoopWriter
     from looplib.validator import ValidationError
+    from looplib.writer import LoopWriter
 
-    input_path  = Path(args.input)
+    input_path = Path(args.input)
     output_path = Path(args.output) if args.output else input_path.with_suffix(".loop")
 
     if not input_path.exists():
@@ -215,14 +221,14 @@ def cmd_convert(args) -> None:
     total_lines = sum(1 for _ in open(input_path, "r", encoding="utf-8"))
 
     metadata = {
-        "name":     args.name or input_path.stem,
+        "name": args.name or input_path.stem,
         "category": args.category or "general",
         "language": args.lang or "fr",
-        "source":   str(input_path),
+        "source": str(input_path),
     }
 
-    writer  = LoopWriter(output_path, metadata=metadata)
-    count   = 0
+    writer = LoopWriter(output_path, metadata=metadata)
+    count = 0
     skipped = 0
 
     print(f"Conversion : {input_path} → {output_path}")
@@ -259,18 +265,18 @@ def _normalize_record(record: dict) -> dict:
         messages = []
         if record.get("system"):
             messages.append({"role": "system", "content": record["system"]})
-        messages.append({"role": "user",      "content": record["instruction"]})
+        messages.append({"role": "user", "content": record["instruction"]})
         messages.append({"role": "assistant", "content": record["output"]})
         return {
             "messages": messages,
-            "quality":  record.get("quality"),
-            "source":   record.get("source"),
+            "quality": record.get("quality"),
+            "source": record.get("source"),
         }
     # Format simple : prompt + response
     if "prompt" in record and "response" in record:
         return {
             "messages": [
-                {"role": "user",      "content": record["prompt"]},
+                {"role": "user", "content": record["prompt"]},
                 {"role": "assistant", "content": record["response"]},
             ]
         }
@@ -290,7 +296,7 @@ def _quality_histogram(quality_buckets: dict, total: int) -> str:
     if not quality_buckets or total == 0:
         return "  (aucune donnée)"
 
-    lines   = []
+    lines = []
     buckets = list(quality_buckets.items())
     max_val = max(v for _, v in buckets)
 
@@ -298,7 +304,7 @@ def _quality_histogram(quality_buckets: dict, total: int) -> str:
     lines.append("  Distribution qualité — histogramme ASCII")
     lines.append("  ──────────────────────────────────────────")
 
-    rows  = 16
+    rows = 16
     scale = max_val / rows if max_val > 0 else 1
 
     for row in range(rows, 0, -1):
@@ -309,7 +315,7 @@ def _quality_histogram(quality_buckets: dict, total: int) -> str:
             line += f" {bar_char}"
         lines.append(line)
 
-    label_line   = "  └" + "┴─" * len(buckets)
+    label_line = "  └" + "┴─" * len(buckets)
     bucket_labels = "  " + " ".join(f"{b.split('-')[0]}" for b, _ in buckets)
     lines.append(label_line)
     lines.append(bucket_labels)
@@ -322,7 +328,7 @@ def cmd_stats(args) -> None:
     from looplib.reader import LoopReader
 
     reader = LoopReader(args.file)
-    info   = reader.info()
+    info = reader.info()
 
     max_len = getattr(args, "max_len", 2048)
 
@@ -333,11 +339,13 @@ def cmd_stats(args) -> None:
     quality_buckets = {f"{i/10:.1f}-{(i+1)/10:.1f}": 0 for i in range(10)}
     total = 0
     tokens_total = 0
-    tags_count   = {}
-    lang_count   = {}
-    split_count  = {"train": 0, "val": 0, "test": 0}
+    tags_count = {}
+    lang_count = {}
+    split_count = {"train": 0, "val": 0, "test": 0}
 
-    for record in reader.stream(min_quality=args.min_quality, split=args.split, language=args.language):
+    for record in reader.stream(
+        min_quality=args.min_quality, split=args.split, language=args.language
+    ):
         q = record.get("quality")
         if q is not None:
             bucket_idx = min(int(float(q) * 10), 9)
@@ -413,12 +421,12 @@ def cmd_stats(args) -> None:
 
     # ── Efficiency estimate ──────────────────────────────────────────────────
     if tokens_total > 0 and info.get("block_size"):
-        naive_seqs  = total
+        naive_seqs = total
         packed_seqs = tokens_total / max_len
         if packed_seqs > 0:
             speedup = naive_seqs / packed_seqs
-            naive_util   = (tokens_total / naive_seqs) / max_len * 100
-            packed_util  = min(99.5, (tokens_total / packed_seqs) / max_len * 100)
+            naive_util = (tokens_total / naive_seqs) / max_len * 100
+            packed_util = min(99.5, (tokens_total / packed_seqs) / max_len * 100)
             print(f"\n  Efficiency estimate (max_seq_len={max_len}) :")
             print(f"    Naive  GPU util : ~{naive_util:.1f}%  ({naive_seqs:,} sequences)")
             print(f"    Packed GPU util : ~{packed_util:.1f}%  ({packed_seqs:.0f} sequences)")
@@ -434,9 +442,10 @@ def cmd_pack(args) -> None:
     Requires a HuggingFace tokenizer name (e.g. meta-llama/Llama-3.2-1B, gpt2).
     Uses SequencePacker to pack multiple short conversations into full GPU sequences.
     """
-    from looplib.reader import LoopReader
-    from looplib.packer import SequencePacker
     import transformers
+
+    from looplib.packer import SequencePacker
+    from looplib.reader import LoopReader
 
     reader = LoopReader(args.file)
 
@@ -449,11 +458,13 @@ def cmd_pack(args) -> None:
         sys.exit(1)
 
     if not hasattr(tok, "apply_chat_template"):
-        print(f"Attention : le tokenizer n'a pas de apply_chat_template — packing en mode texte brut.")
+        print(
+            f"Attention : le tokenizer n'a pas de apply_chat_template — packing en mode texte brut."
+        )
 
-    max_len     = args.max_seq_len
+    max_len = args.max_seq_len
     min_quality = getattr(args, "min_quality", None)
-    split       = getattr(args, "split", None)
+    split = getattr(args, "split", None)
 
     # Efficiency estimate via SequencePacker
     print("\nAnalyse de l'efficacité du packing...")
@@ -487,14 +498,20 @@ def cmd_pack(args) -> None:
         count = 0
         print(f"\nExport vers {args.output}...")
         with open(args.output, "w") as f:
-            for packed in reader.packed_sequences(tok, max_seq_len=max_len,
-                                                   min_quality=min_quality, split=split):
-                f.write(json.dumps({
-                    "input_ids":      packed["input_ids"],
-                    "labels":         packed["labels"],
-                    "attention_mask": packed["attention_mask"],
-                    "position_ids":  packed["position_ids"],
-                }) + "\n")
+            for packed in reader.packed_sequences(
+                tok, max_seq_len=max_len, min_quality=min_quality, split=split
+            ):
+                f.write(
+                    json.dumps(
+                        {
+                            "input_ids": packed["input_ids"],
+                            "labels": packed["labels"],
+                            "attention_mask": packed["attention_mask"],
+                            "position_ids": packed["position_ids"],
+                        }
+                    )
+                    + "\n"
+                )
                 count += 1
                 if args.limit and count >= args.limit:
                     break
@@ -511,13 +528,13 @@ def cmd_filter(args) -> None:
     from looplib.writer import LoopWriter
 
     reader = LoopReader(args.file)
-    meta   = dict(reader.metadata)
-    meta["name"]   = meta.get("name", "") + "_filtered"
+    meta = dict(reader.metadata)
+    meta["name"] = meta.get("name", "") + "_filtered"
     meta["source"] = str(args.file)
 
     output = args.output or Path(args.file).stem + "_filtered.loop"
     writer = LoopWriter(output, metadata=meta)
-    count  = 0
+    count = 0
 
     for record in reader.stream(min_quality=args.min_quality, split=args.split):
         writer.add(record)
@@ -536,8 +553,8 @@ def cmd_count(args) -> None:
     from looplib.reader import LoopReader
 
     reader = LoopReader(args.file)
-    count  = reader.count(min_quality=args.min_quality, split=args.split)
-    total  = reader._header["n_records"]
+    count = reader.count(min_quality=args.min_quality, split=args.split)
+    total = reader._header["n_records"]
 
     print(f"{count:,} records", end="")
     if args.min_quality is not None or args.split is not None:
@@ -548,8 +565,8 @@ def cmd_count(args) -> None:
 def cmd_merge(args) -> None:
     """Fusionne plusieurs fichiers .loop en un seul."""
     from looplib.reader import LoopReader
-    from looplib.writer import LoopWriter
     from looplib.validator import ValidationError
+    from looplib.writer import LoopWriter
 
     input_paths = [Path(p) for p in args.files]
     output_path = Path(args.output)
@@ -561,14 +578,14 @@ def cmd_merge(args) -> None:
 
     # Collect metadata from first file as base
     first_reader = LoopReader(input_paths[0])
-    merged_meta  = dict(first_reader.metadata)
-    merged_meta["name"]        = args.name or (merged_meta.get("name", "merged") + "_merged")
-    merged_meta["description"]  = f"Fusion de {len(input_paths)} fichiers .loop"
-    merged_meta["source"]      = ", ".join(str(p) for p in input_paths)
+    merged_meta = dict(first_reader.metadata)
+    merged_meta["name"] = args.name or (merged_meta.get("name", "merged") + "_merged")
+    merged_meta["description"] = f"Fusion de {len(input_paths)} fichiers .loop"
+    merged_meta["source"] = ", ".join(str(p) for p in input_paths)
 
-    writer   = LoopWriter(output_path, metadata=merged_meta)
-    total    = 0
-    skipped  = 0
+    writer = LoopWriter(output_path, metadata=merged_meta)
+    total = 0
+    skipped = 0
 
     print(f"Fusion de {len(input_paths)} fichiers .loop → {output_path}")
 
@@ -606,23 +623,24 @@ def cmd_inspect(args) -> None:
         if args.record < 0 or args.record >= info["n_records"]:
             print(f"Index hors limites : {args.record} (max: {info['n_records'] - 1})")
             sys.exit(1)
-        
+
         # Find which block contains this record
         block_idx = args.record // info["block_size"]
         offset_in_block = args.record % info["block_size"]
-        
+
         records = reader.read_block(block_idx)
         if offset_in_block >= len(records):
             print(f"Record {args.record} non trouvé dans le bloc {block_idx}")
             sys.exit(1)
-        
+
         records_to_show = [(args.record, records[offset_in_block])]
     else:
         # Sample random records
         import random
+
         sample_size = min(args.sample or 3, info["n_records"])
         indices = sorted(random.sample(range(info["n_records"]), sample_size))
-        
+
         records_to_show = []
         for idx in indices:
             block_idx = idx // info["block_size"]
@@ -635,31 +653,31 @@ def cmd_inspect(args) -> None:
     print(f"\n{'─' * 60}")
     print(f"  Inspection : {args.file}")
     print(f"{'─' * 60}")
-    
+
     for idx, record in records_to_show:
         print(f"\n  Record #{idx}")
         print(f"  {'─' * 56}")
-        
+
         # Messages
         print(f"  Messages ({len(record.get('messages', []))}):")
-        for i, msg in enumerate(record.get('messages', [])):
-            role = msg.get('role', '?')
-            content = msg.get('content', '')
+        for i, msg in enumerate(record.get("messages", [])):
+            role = msg.get("role", "?")
+            content = msg.get("content", "")
             # Truncate long content
             if len(content) > 200 and not args.full:
                 content = content[:200] + "... [truncated, use --full]"
             print(f"    [{role:10}] {content[:80]}{'...' if len(content) > 80 else ''}")
-        
+
         # Metadata fields
-        meta_fields = ['quality', 'language', 'split', 'source', 'tokens', 'tags']
+        meta_fields = ["quality", "language", "split", "source", "tokens", "tags"]
         meta = {k: record.get(k) for k in meta_fields if k in record}
         if meta:
             print(f"\n  Métadonnées:")
             for k, v in meta.items():
-                if k == 'tags' and isinstance(v, list):
-                    v = ', '.join(v)
+                if k == "tags" and isinstance(v, list):
+                    v = ", ".join(v)
                 print(f"    {k:12} : {v}")
-    
+
     print(f"\n{'─' * 60}\n")
 
 
@@ -721,7 +739,9 @@ def cmd_diff(args) -> None:
         val_b = info_b.get(key, 0)
         diff = val_b - val_a
         sign = "+" if diff > 0 else ""
-        print(f"  {label:15} │ A: {fmt.format(val_a):>12} │ B: {fmt.format(val_b):>12} │ Δ: {sign}{diff:,}")
+        print(
+            f"  {label:15} │ A: {fmt.format(val_a):>12} │ B: {fmt.format(val_b):>12} │ Δ: {sign}{diff:,}"
+        )
 
     # Compare quality stats
     qa = info_a.get("quality_stats", {})
@@ -770,9 +790,10 @@ def main() -> None:
         description="Outil CLI pour le format .loop",
     )
     parser.add_argument(
-        "--version", "-v",
+        "--version",
+        "-v",
         action="version",
-        version=f"loop {__version__} (format v{__format_version__[0]}.{__format_version__[1]})"
+        version=f"loop {__version__} (format v{__format_version__[0]}.{__format_version__[1]})",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -786,65 +807,109 @@ def main() -> None:
 
     # loop convert
     p_conv = subparsers.add_parser("convert", help="Convertir JSONL → .loop")
-    p_conv.add_argument("input",            help="Fichier source (.jsonl)")
-    p_conv.add_argument("--output", "-o",   help="Fichier de sortie (.loop)")
-    p_conv.add_argument("--name",           help="Nom du dataset")
-    p_conv.add_argument("--category",       help="Catégorie (code, instruct, ...)")
-    p_conv.add_argument("--lang",           help="Code langue (fr, en, ...)")
+    p_conv.add_argument("input", help="Fichier source (.jsonl)")
+    p_conv.add_argument("--output", "-o", help="Fichier de sortie (.loop)")
+    p_conv.add_argument("--name", help="Nom du dataset")
+    p_conv.add_argument("--category", help="Catégorie (code, instruct, ...)")
+    p_conv.add_argument("--lang", help="Code langue (fr, en, ...)")
 
     # loop stats
     p_stats = subparsers.add_parser("stats", help="Statistiques détaillées")
     p_stats.add_argument("file")
-    p_stats.add_argument("--plot", "-p", action="store_true", help="Afficher un histogramme ASCII de la distribution de qualité")
-    p_stats.add_argument("--max-len", "-m", type=int, default=2048, help="Longueur max de séquence pour l'estimation d'efficacité (défaut: 2048)")
+    p_stats.add_argument(
+        "--plot",
+        "-p",
+        action="store_true",
+        help="Afficher un histogramme ASCII de la distribution de qualité",
+    )
+    p_stats.add_argument(
+        "--max-len",
+        "-m",
+        type=int,
+        default=2048,
+        help="Longueur max de séquence pour l'estimation d'efficacité (défaut: 2048)",
+    )
 
     # loop pack
     p_pack = subparsers.add_parser("pack", help="Pack records en séquences + stats d'efficacité")
-    p_pack.add_argument("file",                       help="Fichier .loop source")
-    p_pack.add_argument("--tokenizer", "-t", required=True, help="Nom du tokenizer HuggingFace (ex: gpt2, meta-llama/Llama-3.2-1B)")
-    p_pack.add_argument("--max-seq-len", "-l", type=int, default=2048, help="Longueur max de séquence (défaut: 2048)")
-    p_pack.add_argument("--min-quality", "-q", type=float, default=None, help="Score qualité minimum")
+    p_pack.add_argument("file", help="Fichier .loop source")
+    p_pack.add_argument(
+        "--tokenizer",
+        "-t",
+        required=True,
+        help="Nom du tokenizer HuggingFace (ex: gpt2, meta-llama/Llama-3.2-1B)",
+    )
+    p_pack.add_argument(
+        "--max-seq-len",
+        "-l",
+        type=int,
+        default=2048,
+        help="Longueur max de séquence (défaut: 2048)",
+    )
+    p_pack.add_argument(
+        "--min-quality", "-q", type=float, default=None, help="Score qualité minimum"
+    )
     p_pack.add_argument("--split", "-s", choices=["train", "val", "test"], help="Filtrer par split")
     p_pack.add_argument("--output", "-o", help="Exporter les séquences vers un fichier JSONL")
-    p_pack.add_argument("--limit", type=int, default=None, help="Nombre max de séquences à exporter")
+    p_pack.add_argument(
+        "--limit", type=int, default=None, help="Nombre max de séquences à exporter"
+    )
 
     # loop filter
     p_filt = subparsers.add_parser("filter", help="Filtrer et exporter")
     p_filt.add_argument("file")
-    p_filt.add_argument("--output",      "-o")
+    p_filt.add_argument("--output", "-o")
     p_filt.add_argument("--min-quality", "-q", type=float, default=None)
-    p_filt.add_argument("--split",       "-s", choices=["train", "val", "test"])
+    p_filt.add_argument("--split", "-s", choices=["train", "val", "test"])
 
     # loop count
     p_count = subparsers.add_parser("count", help="Compter les records (avec filtres optionnels)")
     p_count.add_argument("file")
     p_count.add_argument("--min-quality", "-q", type=float, default=None)
-    p_count.add_argument("--split",       "-s", choices=["train", "val", "test"])
+    p_count.add_argument("--split", "-s", choices=["train", "val", "test"])
 
     # loop merge
     p_merge = subparsers.add_parser("merge", help="Fusionner plusieurs fichiers .loop")
-    p_merge.add_argument("files",  nargs="+", help="Fichiers .loop à fusionner")
+    p_merge.add_argument("files", nargs="+", help="Fichiers .loop à fusionner")
     p_merge.add_argument("--output", "-o", required=True, help="Fichier de sortie (.loop)")
-    p_merge.add_argument("--name",         help="Nom du dataset fusionné")
+    p_merge.add_argument("--name", help="Nom du dataset fusionné")
 
     # loop inspect
     p_inspect = subparsers.add_parser("inspect", help="Inspecter un record spécifique")
     p_inspect.add_argument("file", help="Fichier .loop")
-    p_inspect.add_argument("--record", "-r", type=int, default=None, help="Index du record à inspecter")
-    p_inspect.add_argument("--sample", "-s", type=int, default=3, help="Nombre d'enregistrements à échantillonner (défaut: 3)")
-    p_inspect.add_argument("--full", "-f", action="store_true", help="Afficher le contenu complet des messages")
+    p_inspect.add_argument(
+        "--record", "-r", type=int, default=None, help="Index du record à inspecter"
+    )
+    p_inspect.add_argument(
+        "--sample",
+        "-s",
+        type=int,
+        default=3,
+        help="Nombre d'enregistrements à échantillonner (défaut: 3)",
+    )
+    p_inspect.add_argument(
+        "--full", "-f", action="store_true", help="Afficher le contenu complet des messages"
+    )
 
     # loop patch create
-    p_patch_create = subparsers.add_parser("patch-create", help="Créer un fichier patch (.looppatch)")
+    p_patch_create = subparsers.add_parser(
+        "patch-create", help="Créer un fichier patch (.looppatch)"
+    )
     p_patch_create.add_argument("base", help="Fichier .loop de base")
     p_patch_create.add_argument("records", help="Fichier JSONL avec les nouveaux records")
-    p_patch_create.add_argument("-o", "--output", required=True, help="Fichier patch de sortie (.looppatch)")
+    p_patch_create.add_argument(
+        "-o", "--output", required=True, help="Fichier patch de sortie (.looppatch)"
+    )
 
     # loop patch apply
-    p_patch_apply = subparsers.add_parser("patch-apply", help="Appliquer un fichier patch (.looppatch)")
+    p_patch_apply = subparsers.add_parser(
+        "patch-apply", help="Appliquer un fichier patch (.looppatch)"
+    )
     p_patch_apply.add_argument("base", help="Fichier .loop de base")
     p_patch_apply.add_argument("patch", help="Fichier patch (.looppatch)")
-    p_patch_apply.add_argument("-o", "--output", required=True, help="Fichier .loop fusionné de sortie")
+    p_patch_apply.add_argument(
+        "-o", "--output", required=True, help="Fichier .loop fusionné de sortie"
+    )
 
     # loop diff
     p_diff = subparsers.add_parser("diff", help="Comparer deux fichiers .loop")
@@ -854,18 +919,18 @@ def main() -> None:
     args = parser.parse_args()
 
     commands = {
-        "info":     cmd_info,
+        "info": cmd_info,
         "validate": cmd_validate,
-        "convert":  cmd_convert,
-        "stats":    cmd_stats,
-        "filter":   cmd_filter,
-        "count":    cmd_count,
-        "merge":    cmd_merge,
-        "pack":     cmd_pack,
-        "inspect":  cmd_inspect,
+        "convert": cmd_convert,
+        "stats": cmd_stats,
+        "filter": cmd_filter,
+        "count": cmd_count,
+        "merge": cmd_merge,
+        "pack": cmd_pack,
+        "inspect": cmd_inspect,
         "patch-create": cmd_patch_create,
-        "patch-apply":  cmd_patch_apply,
-        "diff":     cmd_diff,
+        "patch-apply": cmd_patch_apply,
+        "diff": cmd_diff,
     }
     commands[args.command](args)
 

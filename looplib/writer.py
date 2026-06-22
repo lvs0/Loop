@@ -25,24 +25,33 @@ Exemple d'utilisation :
 from __future__ import annotations
 
 import json
-import struct
 import logging
+import struct
 import time
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import zstandard as zstd
 
 from looplib.constants import (
-    MAGIC_HEADER, MAGIC_FOOTER, MAGIC_BLOCK,
-    HEADER_SIZE, INDEX_ENTRY_SIZE, FOOTER_SIZE,
-    FORMAT_VERSION_MAJOR, FORMAT_VERSION_MINOR,
-    FLAG_COMPRESSION_ZSTD, FLAG_MULTI_SPLIT,
-    SPLIT_IDS, SPLIT_ALL,
-    MAX_RECORD_SIZE, MAX_BLOCK_SIZE, ZSTD_LEVEL,
+    FLAG_COMPRESSION_ZSTD,
+    FLAG_MULTI_SPLIT,
+    FOOTER_SIZE,
+    FORMAT_VERSION_MAJOR,
+    FORMAT_VERSION_MINOR,
+    HEADER_SIZE,
+    INDEX_ENTRY_SIZE,
+    MAGIC_BLOCK,
+    MAGIC_FOOTER,
+    MAGIC_HEADER,
+    MAX_BLOCK_SIZE,
+    MAX_RECORD_SIZE,
+    SPLIT_ALL,
+    SPLIT_IDS,
+    ZSTD_LEVEL,
 )
-from looplib.validator import LoopValidator, ValidationError
 from looplib.utils import crc64, schema_hash
+from looplib.validator import LoopValidator, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +63,7 @@ class LoopWriter:
     Le fichier est construit en mémoire par blocs puis écrit d'un seul coup
     lors de l'appel à .save(). Pour des datasets très larges (>10GB), utiliser
     StreamingLoopWriter.
-    
+
     Example:
         writer = LoopWriter("output.loop", metadata={"name": "my_dataset"})
         for record in records:
@@ -63,7 +72,7 @@ class LoopWriter:
     """
 
     SCHEMA = {
-        "roles":           ["system", "user", "assistant", "tool", "function"],
+        "roles": ["system", "user", "assistant", "tool", "function"],
         "required_fields": ["messages"],
         "optional_fields": ["quality", "source", "language", "tags", "tokens", "split"],
     }
@@ -82,25 +91,25 @@ class LoopWriter:
             block_size: Nombre de records par bloc (défaut 512).
             validate:   Si True, valide chaque record à l'ajout.
         """
-        self.path       = Path(path)
-        self.metadata   = metadata or {}
+        self.path = Path(path)
+        self.metadata = metadata or {}
         self.block_size = block_size
-        self.validate   = validate
+        self.validate = validate
 
-        self._records:      List[Dict] = []   # buffer courant
-        self._blocks:       List[bytes] = []  # blocs compressés finalisés
-        self._block_meta:   List[Dict] = []   # stats par bloc
-        self._validator     = LoopValidator()
-        self._compressor    = zstd.ZstdCompressor(level=ZSTD_LEVEL)
+        self._records: List[Dict] = []  # buffer courant
+        self._blocks: List[bytes] = []  # blocs compressés finalisés
+        self._block_meta: List[Dict] = []  # stats par bloc
+        self._validator = LoopValidator()
+        self._compressor = zstd.ZstdCompressor(level=ZSTD_LEVEL)
 
         # Stats globales
-        self._n_records      = 0
-        self._total_tokens   = 0
+        self._n_records = 0
+        self._total_tokens = 0
         self._quality_scores: List[float] = []
-        self._splits_count   = {0: 0, 1: 0, 2: 0}  # train/val/test
-        self._sources        = set()
-        self._tags           = set()
-        self._crc_data       = b""  # accumulation pour CRC64 final
+        self._splits_count = {0: 0, 1: 0, 2: 0}  # train/val/test
+        self._sources = set()
+        self._tags = set()
+        self._crc_data = b""  # accumulation pour CRC64 final
 
     def __repr__(self) -> str:
         """Représentation concise pour debugging."""
@@ -145,7 +154,7 @@ class LoopWriter:
             self._tags.update(record["tags"])
 
         split_name = record.get("split", "train")
-        split_id   = SPLIT_IDS.get(split_name, 0)
+        split_id = SPLIT_IDS.get(split_name, 0)
         self._splits_count[split_id] = self._splits_count.get(split_id, 0) + 1
 
         self._records.append(record)
@@ -184,13 +193,13 @@ class LoopWriter:
 
         # Préparer les métadonnées finales
         full_metadata = self._build_metadata()
-        meta_json     = json.dumps(full_metadata, ensure_ascii=False, separators=(",", ":"))
-        meta_bytes    = self._compressor.compress(meta_json.encode("utf-8"))
+        meta_json = json.dumps(full_metadata, ensure_ascii=False, separators=(",", ":"))
+        meta_bytes = self._compressor.compress(meta_json.encode("utf-8"))
 
         # Calcul des offsets
-        index_offset    = HEADER_SIZE
-        index_size      = len(self._blocks) * INDEX_ENTRY_SIZE
-        blocks_start    = index_offset + index_size
+        index_offset = HEADER_SIZE
+        index_size = len(self._blocks) * INDEX_ENTRY_SIZE
+        blocks_start = index_offset + index_size
 
         block_offsets = []
         cursor = blocks_start
@@ -243,12 +252,12 @@ class LoopWriter:
                 # struct.pack ci-dessus = 8+4+4+4+2+2+padding = 25... recalcul
                 # On écrit manuellement pour être exact sur 24 bytes
                 entry = (
-                    struct.pack("<Q", offset) +
-                    struct.pack("<I", len(block)) +
-                    struct.pack("<I", bm["uncompressed_size"]) +
-                    struct.pack("<I", bm["n_records"]) +
-                    struct.pack("<H", bm["split_id"]) +
-                    struct.pack("<H", 0)  # reserved
+                    struct.pack("<Q", offset)
+                    + struct.pack("<I", len(block))
+                    + struct.pack("<I", bm["uncompressed_size"])
+                    + struct.pack("<I", bm["n_records"])
+                    + struct.pack("<H", bm["split_id"])
+                    + struct.pack("<H", 0)  # reserved
                 )
                 assert len(entry) == INDEX_ENTRY_SIZE
                 f.write(entry)
@@ -261,11 +270,7 @@ class LoopWriter:
             f.write(meta_bytes)
 
             # FOOTER (16 bytes)
-            footer = (
-                struct.pack("<I", len(meta_bytes)) +
-                struct.pack("<Q", crc) +
-                MAGIC_FOOTER
-            )
+            footer = struct.pack("<I", len(meta_bytes)) + struct.pack("<Q", crc) + MAGIC_FOOTER
             assert len(footer) == FOOTER_SIZE
             f.write(footer)
 
@@ -297,7 +302,9 @@ class LoopWriter:
         # Sérialisation des records
         raw_parts = []
         for record in self._records:
-            record_bytes = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            record_bytes = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            )
             if len(record_bytes) > MAX_RECORD_SIZE:
                 raise ValueError(
                     f"Record trop grand : {len(record_bytes)} bytes > {MAX_RECORD_SIZE} bytes max"
@@ -314,11 +321,13 @@ class LoopWriter:
         compressed = self._compressor.compress(uncompressed)
 
         self._blocks.append(compressed)
-        self._block_meta.append({
-            "n_records":        len(self._records),
-            "uncompressed_size": len(uncompressed),
-            "split_id":         dominant_split,
-        })
+        self._block_meta.append(
+            {
+                "n_records": len(self._records),
+                "uncompressed_size": len(uncompressed),
+                "split_id": dominant_split,
+            }
+        )
 
         self._records = []
 
@@ -327,34 +336,34 @@ class LoopWriter:
         quality_stats = {}
         if self._quality_scores:
             qs = sorted(self._quality_scores)
-            n  = len(qs)
+            n = len(qs)
             quality_stats = {
-                "mean":  round(sum(qs) / n, 4),
-                "min":   round(qs[0], 4),
-                "max":   round(qs[-1], 4),
-                "p25":   round(qs[n // 4], 4),
-                "p75":   round(qs[3 * n // 4], 4),
+                "mean": round(sum(qs) / n, 4),
+                "min": round(qs[0], 4),
+                "max": round(qs[-1], 4),
+                "p25": round(qs[n // 4], 4),
+                "p75": round(qs[3 * n // 4], 4),
             }
 
         splits = {
             "train": self._splits_count.get(0, 0),
-            "val":   self._splits_count.get(1, 0),
-            "test":  self._splits_count.get(2, 0),
+            "val": self._splits_count.get(1, 0),
+            "test": self._splits_count.get(2, 0),
         }
 
         meta = {
             "loop_format_version": "1.0",
-            "n_records":           self._n_records,
-            "n_blocks":            len(self._blocks),
-            "block_size":          self.block_size,
-            "compression":         "zstd",
-            "schema":              self.SCHEMA,
-            "splits":              splits,
-            "created_at":          time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "n_records": self._n_records,
+            "n_blocks": len(self._blocks),
+            "block_size": self.block_size,
+            "compression": "zstd",
+            "schema": self.SCHEMA,
+            "splits": splits,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
 
         if self._total_tokens > 0:
-            meta["total_tokens_approx"]   = self._total_tokens
+            meta["total_tokens_approx"] = self._total_tokens
             meta["avg_tokens_per_record"] = round(self._total_tokens / self._n_records)
         if quality_stats:
             meta["quality_stats"] = quality_stats
@@ -373,7 +382,9 @@ class LoopWriter:
     # ──────────────────────────────────────────────────────────────────────────
 
     @classmethod
-    def merge(cls, paths: List[Path], output_path: Path, metadata: Optional[Dict[str, Any]] = None) -> Path:
+    def merge(
+        cls, paths: List[Path], output_path: Path, metadata: Optional[Dict[str, Any]] = None
+    ) -> Path:
         """Fusionne plusieurs fichiers .loop en un seul.
 
         Les blocs de chaque fichier sont recompressés et réécrits dans
@@ -428,32 +439,35 @@ class LoopWriter:
         writer.save()
 
         # Réécrire les métadonnées avec les stats agrégées
-        _rewrite_metadata(output_path, {
-            "loop_format_version": "1.0",
-            "n_records": writer._n_records,
-            "n_blocks": len(writer._blocks),
-            "block_size": writer.block_size,
-            "compression": "zstd",
-            "schema": writer.SCHEMA,
-            "splits": {
-                "train": splits_count.get(0, 0),
-                "val": splits_count.get(1, 0),
-                "test": splits_count.get(2, 0),
+        _rewrite_metadata(
+            output_path,
+            {
+                "loop_format_version": "1.0",
+                "n_records": writer._n_records,
+                "n_blocks": len(writer._blocks),
+                "block_size": writer.block_size,
+                "compression": "zstd",
+                "schema": writer.SCHEMA,
+                "splits": {
+                    "train": splits_count.get(0, 0),
+                    "val": splits_count.get(1, 0),
+                    "test": splits_count.get(2, 0),
+                },
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "sources": sorted(set(sources)),
+                "total_tokens_approx": total_tokens,
+                "quality_stats": (
+                    {
+                        "mean": round(sum(quality_scores) / len(quality_scores), 4),
+                        "min": round(min(quality_scores), 4),
+                        "max": round(max(quality_scores), 4),
+                    }
+                    if quality_scores
+                    else {}
+                ),
+                **meta,
             },
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "sources": sorted(set(sources)),
-            "total_tokens_approx": total_tokens,
-            "quality_stats": (
-                {
-                    "mean": round(sum(quality_scores) / len(quality_scores), 4),
-                    "min": round(min(quality_scores), 4),
-                    "max": round(max(quality_scores), 4),
-                }
-                if quality_scores
-                else {}
-            ),
-            **meta,
-        })
+        )
 
         logger.info(f"Merged {len(paths)} files → {output_path} ({writer._n_records} records)")
         return output_path
@@ -510,7 +524,7 @@ def _rewrite_metadata(path: Path, metadata: Dict[str, Any]) -> None:
         # Lire les blocs compressés en utilisant les offsets de l'index
         blocks: List[bytes] = []
         for bi in range(n_blocks):
-            entry = index_data[bi * INDEX_ENTRY_SIZE: (bi + 1) * INDEX_ENTRY_SIZE]
+            entry = index_data[bi * INDEX_ENTRY_SIZE : (bi + 1) * INDEX_ENTRY_SIZE]
             offset = int.from_bytes(entry[0:8], "little")
             size = int.from_bytes(entry[8:12], "little")
             f.seek(offset)
@@ -532,10 +546,6 @@ def _rewrite_metadata(path: Path, metadata: Dict[str, Any]) -> None:
         for block in blocks:
             f.write(block)  # blocs recopiés
         f.write(meta_bytes)  # nouvelles métadonnées
-        footer = (
-            struct.pack("<I", len(meta_bytes)) +
-            struct.pack("<Q", crc) +
-            MAGIC_FOOTER
-        )
+        footer = struct.pack("<I", len(meta_bytes)) + struct.pack("<Q", crc) + MAGIC_FOOTER
         f.write(footer)
         f.truncate()

@@ -28,3 +28,4 @@ htmlcov/
 # Loop data files (user generated)
 *.loop
 *.looppatch
+uv.lock

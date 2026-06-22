@@ -4,12 +4,14 @@ LoopValidator — Validation des records .loop
 Vérifie qu'un record respecte le schéma avant d'être écrit.
 """
 
-from typing import Dict, Any
+from typing import Any, Dict
+
 from looplib.constants import VALID_ROLES
 
 
 class ValidationError(Exception):
     """Erreur de validation d'un record .loop."""
+
     pass
 
 
@@ -37,7 +39,7 @@ class LoopValidator:
         if not isinstance(messages, list) or len(messages) == 0:
             raise ValidationError("'messages' doit être une liste non vide")
 
-        has_user      = False
+        has_user = False
         has_assistant = False
 
         for i, msg in enumerate(messages):
@@ -55,9 +57,7 @@ class LoopValidator:
                     f"Valeurs acceptées : {sorted(VALID_ROLES)}"
                 )
             if not isinstance(msg["content"], str) or not msg["content"].strip():
-                raise ValidationError(
-                    f"messages[{i}] : 'content' doit être une chaîne non vide"
-                )
+                raise ValidationError(f"messages[{i}] : 'content' doit être une chaîne non vide")
 
             if role == "user":
                 has_user = True
@@ -101,7 +101,9 @@ class LoopValidator:
                 raise ValidationError("'tags' doit être une liste")
             for tag in tags:
                 if not isinstance(tag, str):
-                    raise ValidationError(f"Chaque tag doit être une chaîne, reçu : {type(tag).__name__}")
+                    raise ValidationError(
+                        f"Chaque tag doit être une chaîne, reçu : {type(tag).__name__}"
+                    )
 
     def __enter__(self) -> "LoopValidator":
         return self

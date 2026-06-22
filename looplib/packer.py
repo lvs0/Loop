@@ -25,7 +25,7 @@ Exemple :
 """
 
 import logging
-from typing import Dict, Any, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +45,14 @@ class SequencePacker:
     def __init__(
         self,
         tokenizer,
-        max_seq_len:      int  = 2048,
-        pad_token_id:     int  = 0,
-        label_ignore_id:  int  = -100,
-        add_eos_between:  bool = True,
+        max_seq_len: int = 2048,
+        pad_token_id: int = 0,
+        label_ignore_id: int = -100,
+        add_eos_between: bool = True,
     ) -> None:
-        self.tokenizer       = tokenizer
-        self.max_seq_len     = max_seq_len
-        self.pad_token_id    = pad_token_id
+        self.tokenizer = tokenizer
+        self.max_seq_len = max_seq_len
+        self.pad_token_id = pad_token_id
         self.label_ignore_id = label_ignore_id
         self.add_eos_between = add_eos_between
 
@@ -66,9 +66,9 @@ class SequencePacker:
             dict avec clés : input_ids, labels, attention_mask, position_ids
             Toutes les listes ont exactement max_seq_len éléments.
         """
-        current_ids      = []
-        current_labels   = []
-        current_pos_ids  = []
+        current_ids = []
+        current_labels = []
+        current_pos_ids = []
         current_att_mask = []
 
         for record in records:
@@ -78,7 +78,7 @@ class SequencePacker:
                 logger.warning(f"Erreur de tokenisation, record ignoré : {exc}")
                 continue
 
-            ids    = tokenized["input_ids"]
+            ids = tokenized["input_ids"]
             labels = tokenized["labels"]
 
             if len(ids) > self.max_seq_len:
@@ -105,9 +105,9 @@ class SequencePacker:
 
             # Position IDs : repartent de 0 pour chaque nouvelle conversation
             # (important pour RoPE — les modèles récents utilisent des position IDs relatifs)
-            current_ids      += ids
-            current_labels   += labels
-            current_pos_ids  += list(range(len(ids)))  # 0, 1, 2, ... pour cette convo
+            current_ids += ids
+            current_labels += labels
+            current_pos_ids += list(range(len(ids)))  # 0, 1, 2, ... pour cette convo
             current_att_mask += [1] * len(ids)
 
         # Flush final
@@ -174,7 +174,7 @@ class SequencePacker:
 
                 # Tokeniser la réponse seule
                 response_text = msg["content"]
-                response_ids  = self.tokenizer.encode(response_text, add_special_tokens=False)
+                response_ids = self.tokenizer.encode(response_text, add_special_tokens=False)
 
                 # Activer ces tokens dans labels
                 end = min(prefix_len + len(response_ids), len(full_ids))
@@ -190,14 +190,14 @@ class SequencePacker:
 
     def _tokenize_simple(self, messages) -> Dict[str, List[int]]:
         """Fallback : tokenisation simple sans template."""
-        parts_ids    = []
+        parts_ids = []
         parts_labels = []
 
         for msg in messages:
-            role    = msg["role"]
+            role = msg["role"]
             content = msg["content"]
-            text    = f"<|{role}|>\n{content}\n"
-            ids     = self.tokenizer.encode(text, add_special_tokens=False)
+            text = f"<|{role}|>\n{content}\n"
+            ids = self.tokenizer.encode(text, add_special_tokens=False)
 
             parts_ids += ids
             if role == "assistant":
@@ -212,25 +212,25 @@ class SequencePacker:
 
     def _finalize(
         self,
-        ids:      List[int],
-        labels:   List[int],
-        pos_ids:  List[int],
+        ids: List[int],
+        labels: List[int],
+        pos_ids: List[int],
         att_mask: List[int],
     ) -> Dict[str, List[int]]:
         """Pad jusqu'à max_seq_len et retourne le dict final."""
-        n       = len(ids)
+        n = len(ids)
         padding = self.max_seq_len - n
 
-        ids      = ids      + [self.pad_token_id]    * padding
-        labels   = labels   + [self.label_ignore_id] * padding
-        pos_ids  = pos_ids  + [0]                    * padding
-        att_mask = att_mask + [0]                    * padding
+        ids = ids + [self.pad_token_id] * padding
+        labels = labels + [self.label_ignore_id] * padding
+        pos_ids = pos_ids + [0] * padding
+        att_mask = att_mask + [0] * padding
 
         return {
-            "input_ids":      ids[:self.max_seq_len],
-            "labels":         labels[:self.max_seq_len],
-            "position_ids":   pos_ids[:self.max_seq_len],
-            "attention_mask": att_mask[:self.max_seq_len],
+            "input_ids": ids[: self.max_seq_len],
+            "labels": labels[: self.max_seq_len],
+            "position_ids": pos_ids[: self.max_seq_len],
+            "attention_mask": att_mask[: self.max_seq_len],
         }
 
     def efficiency(self, records: Iterator[Dict[str, Any]]) -> Dict[str, float]:
@@ -244,37 +244,41 @@ class SequencePacker:
               - "speedup_factor":   gain en nombre de séquences nécessaires
         """
         total_tokens = 0
-        n_records    = 0
+        n_records = 0
 
         records_list = list(records)
         for record in records_list:
             try:
                 t = self._tokenize_conversation(record)
                 total_tokens += len(t["input_ids"])
-                n_records    += 1
+                n_records += 1
             except Exception:
                 continue
 
         if n_records == 0:
             return {}
 
-        avg_tokens  = total_tokens / n_records
+        avg_tokens = total_tokens / n_records
         packed_seqs = total_tokens / self.max_seq_len
-        naive_seqs  = n_records
+        naive_seqs = n_records
 
         # Naive: each conversation = 1 full sequence — GPU mostly idle
         naive_gpu = (avg_tokens / self.max_seq_len) * 100
         # Packed: utilization of each packed sequence is
         # (tokens_in_packed_seq / max_seq_len) * 100, which is
         # (total_tokens / n_packed_seqs) / max_seq_len * 100
-        packed_gpu = min(99.9, (total_tokens / packed_seqs) / self.max_seq_len * 100) if packed_seqs > 0 else 0.0
+        packed_gpu = (
+            min(99.9, (total_tokens / packed_seqs) / self.max_seq_len * 100)
+            if packed_seqs > 0
+            else 0.0
+        )
 
         return {
-            "n_records":        n_records,
-            "avg_tokens":       round(avg_tokens),
-            "naive_gpu_usage":  round(naive_gpu, 1),
+            "n_records": n_records,
+            "avg_tokens": round(avg_tokens),
+            "naive_gpu_usage": round(naive_gpu, 1),
             "packed_gpu_usage": round(min(99.9, packed_gpu), 1),
-            "naive_sequences":  naive_seqs,
+            "naive_sequences": naive_seqs,
             "packed_sequences": round(packed_seqs, 1),
-            "speedup_factor":   round(naive_seqs / max(packed_seqs, 1), 2),
+            "speedup_factor": round(naive_seqs / max(packed_seqs, 1), 2),
         }

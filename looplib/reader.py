@@ -17,20 +17,26 @@ Exemple :
 """
 
 import json
-import struct
 import logging
+import struct
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Iterator
+from typing import Any, Dict, Iterator, List, Optional
 
 import zstandard as zstd
 
 from looplib.constants import (
-    MAGIC_HEADER, MAGIC_FOOTER, MAGIC_BLOCK,
-    HEADER_SIZE, INDEX_ENTRY_SIZE, FOOTER_SIZE,
-    FORMAT_VERSION_MAJOR,
-    SPLIT_IDS, SPLIT_NAMES, SPLIT_ALL,
     FLAG_COMPRESSION_ZSTD,
+    FOOTER_SIZE,
+    FORMAT_VERSION_MAJOR,
+    HEADER_SIZE,
+    INDEX_ENTRY_SIZE,
+    MAGIC_BLOCK,
+    MAGIC_FOOTER,
+    MAGIC_HEADER,
     MAX_RECORD_SIZE,
+    SPLIT_ALL,
+    SPLIT_IDS,
+    SPLIT_NAMES,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 class LoopParseError(Exception):
     """Erreur de parsing d'un fichier .loop."""
+
     pass
 
 
@@ -55,12 +62,12 @@ class LoopReader:
     """
 
     def __init__(self, path: str | Path) -> None:
-        self.path        = Path(path)
+        self.path = Path(path)
         self._decompressor = zstd.ZstdDecompressor()
-        self._header     = None
-        self._index      = None
-        self._metadata   = None
-        self._file_size  = 0
+        self._header = None
+        self._index = None
+        self._metadata = None
+        self._file_size = 0
 
         self._parse_header_and_index()
 
@@ -131,31 +138,31 @@ class LoopReader:
         """Retourne un dictionnaire résumant le fichier."""
         meta = self.metadata
         return {
-            "path":              str(self.path),
-            "file_size_mb":      round(self._file_size / 1024 / 1024, 2),
-            "n_records":         self._header["n_records"],
-            "n_blocks":          self._header["n_blocks"],
-            "block_size":        self._header["block_size"],
-            "format_version":    f"{self._header['version_major']}.{self._header['version_minor']}",
-            "compression":       "zstd" if self._header["flags"] & FLAG_COMPRESSION_ZSTD else "none",
-            "name":              meta.get("name", "(sans nom)"),
-            "category":          meta.get("category", "?"),
-            "language":          meta.get("language", "?"),
-            "splits":            meta.get("splits", {}),
-            "quality_stats":     meta.get("quality_stats", {}),
-            "total_tokens":      meta.get("total_tokens_approx", 0),
-            "tags":              meta.get("tags", []),
-            "sources":           meta.get("sources", []),
-            "created_at":        meta.get("created_at", "?"),
+            "path": str(self.path),
+            "file_size_mb": round(self._file_size / 1024 / 1024, 2),
+            "n_records": self._header["n_records"],
+            "n_blocks": self._header["n_blocks"],
+            "block_size": self._header["block_size"],
+            "format_version": f"{self._header['version_major']}.{self._header['version_minor']}",
+            "compression": "zstd" if self._header["flags"] & FLAG_COMPRESSION_ZSTD else "none",
+            "name": meta.get("name", "(sans nom)"),
+            "category": meta.get("category", "?"),
+            "language": meta.get("language", "?"),
+            "splits": meta.get("splits", {}),
+            "quality_stats": meta.get("quality_stats", {}),
+            "total_tokens": meta.get("total_tokens_approx", 0),
+            "tags": meta.get("tags", []),
+            "sources": meta.get("sources", []),
+            "created_at": meta.get("created_at", "?"),
         }
 
     def stream(
         self,
-        min_quality:  Optional[float] = None,
-        max_quality:  Optional[float] = None,
-        split:        Optional[str]   = None,
-        language:     Optional[str]   = None,
-        tags:         Optional[List[str]] = None,
+        min_quality: Optional[float] = None,
+        max_quality: Optional[float] = None,
+        split: Optional[str] = None,
+        language: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> Iterator[Dict[str, Any]]:
         """
         Itère sur les records du fichier avec filtrage optionnel.
@@ -173,7 +180,7 @@ class LoopReader:
             dict record valide correspondant aux filtres.
         """
         target_split_id = SPLIT_IDS.get(split) if split else None
-        tags_set        = set(tags) if tags else None
+        tags_set = set(tags) if tags else None
 
         for block_idx in range(self._header["n_blocks"]):
             index_entry = self._index[block_idx]
@@ -222,9 +229,9 @@ class LoopReader:
         self,
         min_quality: Optional[float] = None,
         max_quality: Optional[float] = None,
-        split:       Optional[str]   = None,
-        language:    Optional[str]   = None,
-        tags:        Optional[List[str]] = None,
+        split: Optional[str] = None,
+        language: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> int:
         """
         Compte les records correspondant aux filtres sans les charger tous.
@@ -249,10 +256,10 @@ class LoopReader:
         self,
         min_quality: Optional[float] = None,
         max_quality: Optional[float] = None,
-        split:       Optional[str]   = None,
-        language:    Optional[str]   = None,
-        tags:        Optional[List[str]] = None,
-        max_records: Optional[int]   = None,
+        split: Optional[str] = None,
+        language: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        max_records: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Charge les records (filtrés) en mémoire.
 
@@ -276,12 +283,12 @@ class LoopReader:
 
     def to_jsonl(
         self,
-        output_path:  str | Path,
-        min_quality:  Optional[float] = None,
-        max_quality:  Optional[float] = None,
-        split:        Optional[str]   = None,
-        language:     Optional[str]   = None,
-        tags:         Optional[List[str]] = None,
+        output_path: str | Path,
+        min_quality: Optional[float] = None,
+        max_quality: Optional[float] = None,
+        split: Optional[str] = None,
+        language: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> int:
         """
         Exporte vers JSONL.
@@ -298,7 +305,7 @@ class LoopReader:
             Nombre de records exportés.
         """
         output_path = Path(output_path)
-        count       = 0
+        count = 0
 
         with open(output_path, "w", encoding="utf-8") as f:
             for record in self.stream(
@@ -319,9 +326,9 @@ class LoopReader:
         self,
         min_quality: Optional[float] = None,
         max_quality: Optional[float] = None,
-        split:       Optional[str]   = None,
-        language:    Optional[str]   = None,
-        tags:        Optional[List[str]] = None,
+        split: Optional[str] = None,
+        language: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ):
         """
         Exporte vers un datasets.Dataset HuggingFace via streaming.
@@ -346,9 +353,7 @@ class LoopReader:
         try:
             from datasets import Dataset
         except ImportError:
-            raise ImportError(
-                "Installer HuggingFace datasets : pip install datasets"
-            )
+            raise ImportError("Installer HuggingFace datasets : pip install datasets")
 
         # True lazy generator: reads records on-demand from the .loop file.
         # We capture self.path (picklable Path) rather than self._decompressor
@@ -374,9 +379,9 @@ class LoopReader:
     def packed_sequences(
         self,
         tokenizer,
-        max_seq_len:  int           = 2048,
-        min_quality:  Optional[float] = None,
-        split:        Optional[str]   = None,
+        max_seq_len: int = 2048,
+        min_quality: Optional[float] = None,
+        split: Optional[str] = None,
     ):
         """
         Stream-packed sequences ready for LLM fine-tuning.
@@ -407,6 +412,7 @@ class LoopReader:
               not torch.Tensors — convert manually if needed for training.
         """
         from looplib.packer import SequencePacker
+
         packer = SequencePacker(tokenizer, max_seq_len=max_seq_len)
         yield from packer.pack(self.stream(min_quality=min_quality, split=split))
 
@@ -432,11 +438,15 @@ class LoopReader:
             # ── Header ──────────────────────────────────────────────────────
             raw_header = f.read(HEADER_SIZE)
             if len(raw_header) < HEADER_SIZE:
-                raise LoopParseError(f"Fichier trop petit pour être un .loop valide ({self._file_size} bytes)")
+                raise LoopParseError(
+                    f"Fichier trop petit pour être un .loop valide ({self._file_size} bytes)"
+                )
 
             magic = raw_header[:4]
             if magic != MAGIC_HEADER:
-                raise LoopParseError(f"Magic bytes invalides : {magic!r} (attendu {MAGIC_HEADER!r})")
+                raise LoopParseError(
+                    f"Magic bytes invalides : {magic!r} (attendu {MAGIC_HEADER!r})"
+                )
 
             (
                 _magic,
@@ -459,15 +469,15 @@ class LoopReader:
                 )
 
             self._header = {
-                "version_major":   version_major,
-                "version_minor":   version_minor,
-                "flags":           flags,
-                "block_size":      block_size,
-                "n_records":       n_records,
-                "n_blocks":        n_blocks,
+                "version_major": version_major,
+                "version_minor": version_minor,
+                "flags": flags,
+                "block_size": block_size,
+                "n_records": n_records,
+                "n_blocks": n_blocks,
                 "metadata_offset": metadata_offset,
-                "created_at":      created_at,
-                "schema_hash":     schema_hash,
+                "created_at": created_at,
+                "schema_hash": schema_hash,
             }
 
             # ── Index ────────────────────────────────────────────────────────
@@ -480,20 +490,22 @@ class LoopReader:
                 offset, comp_size, uncomp_size, n_rec, split_id, _reserved = struct.unpack(
                     "<QIIIHH", raw
                 )
-                index.append({
-                    "offset":            offset,
-                    "compressed_size":   comp_size,
-                    "uncompressed_size": uncomp_size,
-                    "n_records":         n_rec,
-                    "split_id":          split_id,
-                })
+                index.append(
+                    {
+                        "offset": offset,
+                        "compressed_size": comp_size,
+                        "uncompressed_size": uncomp_size,
+                        "n_records": n_rec,
+                        "split_id": split_id,
+                    }
+                )
 
             self._index = index
 
             # ── Footer (vérification rapide) ─────────────────────────────────
             f.seek(-FOOTER_SIZE, 2)
             raw_footer = f.read(FOOTER_SIZE)
-            magic_end  = raw_footer[-4:]
+            magic_end = raw_footer[-4:]
             if magic_end != MAGIC_FOOTER:
                 raise LoopParseError(
                     f"Magic footer invalide : {magic_end!r} (attendu {MAGIC_FOOTER!r}). "
@@ -537,7 +549,7 @@ class LoopReader:
                 raise LoopParseError(f"Record tronqué dans le bloc {block_idx}")
 
             record_bytes = raw[pos : pos + record_len]
-            pos         += record_len
+            pos += record_len
 
             try:
                 record = json.loads(record_bytes.decode("utf-8"))
@@ -559,7 +571,7 @@ class LoopReader:
             f.seek(meta_offset)
             compressed = f.read(meta_compressed_size)
 
-        raw  = self._decompressor.decompress(compressed)
+        raw = self._decompressor.decompress(compressed)
         meta = json.loads(raw.decode("utf-8"))
         return meta
 
