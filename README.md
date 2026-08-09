@@ -14,3 +14,8 @@ mise en forme qui préserve le sens.
 ## Licence
 
 MIT
+
+
+---
+
+**Soutenir** — [`payrequest.me/lvs0`](https://payrequest.me/lvs0)
