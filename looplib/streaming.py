@@ -110,7 +110,9 @@ class StreamingLoopWriter:
     def _init_temp_file(self) -> None:
         """Crée le fichier temporaire pour les blocs de données."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temp_path = tempfile.mkstemp(suffix=".loop", prefix="loop_tmp_", dir=str(self.path.parent))
+        fd, temp_path = tempfile.mkstemp(
+            suffix=".loop", prefix="loop_tmp_", dir=str(self.path.parent)
+        )
         self._temp_path = Path(temp_path)
         self._temp_fd = os.fdopen(fd, "wb")
         logger.debug(f"Temp file: {self._temp_path}")

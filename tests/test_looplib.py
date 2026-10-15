@@ -461,7 +461,9 @@ class TestSequencePacker:
             def encode(self, text, add_special_tokens=True):
                 words = text.strip().split() or [""]
                 # Chaque "mot" dans le texte devient 1 token
-                ids = [abs(hash(w)) % 200 for w in text.split()] or [abs(hash(text)) % 200]
+                ids = [3 + sum(map(ord, w)) % 197 for w in text.split()]
+                if not ids:
+                    ids = [3 + sum(map(ord, text)) % 197]
                 if add_special_tokens:
                     ids = [1] + ids + [2]
                 return ids
